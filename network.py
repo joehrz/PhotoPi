@@ -11,8 +11,13 @@ class NetworkManager:
     def connect(self):
         self.client = paramiko.SSHClient()
         self.client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        self.client.connect(self.hostname, username=self.username, password=self.password)
-        self.sftp = self.client.open_sftp()
+        try:
+            self.client.connect(self.hostname, username=self.username, password=self.password)
+            self.sftp = self.client.open_sftp()
+        except paramiko.AuthenticationException:
+            raise Exception("Authentication failed, please check your credentials.")
+        except paramiko.SSHException as e:
+            raise Exception(f"SSH connection error: {e}")
 
     def disconnect(self):
         if self.sftp:
