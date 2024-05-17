@@ -22,6 +22,7 @@ class CameraSystem:
     def inspect(self):
         folder_with_date = self.config.get("folderWithDate_path")
         plant_folder = folder_with_date.rsplit('/', 1)[-1] if folder_with_date else 'default_folder'
+        stdin,stdout,stderr = self.ssh_client.exec_command(f'sudo mkdir -p /home/pi/Images/{plant_folder}/inspect')
 
         for camera_id in ['A', 'B', 'C', 'D']:
             if self.config.get(f"camera_{camera_id.lower()}", 0) == 1:
@@ -45,8 +46,9 @@ class CameraSystem:
 
     def transfer_images(self, plant_folder):
         local_dir = self.config.get("folder_path", "/default/path")
-        remote_dir = f"/home/pi/Images/{plant_folder}/inspect"
-        os.system(f"scp -r pi@raspberrypi.local:{remote_dir} {local_dir}")
+        remote_dir = f"/home/pi/Images/{plant_folder}"
+        pi_hostname = self.config.get("pi_hostname")
+        os.system(f"scp -r pi@{pi_hostname}:{remote_dir} {local_dir}")
         print("Images transferred to", local_dir)
 
 # Ensure that the CameraSystem instance is used properly

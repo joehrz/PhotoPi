@@ -3,8 +3,10 @@
     "camera_b": 1,
     "angle": "10",
     "seconds": "3",
-    "plant_name": "test",
-    "folder_path": "/Users/Evelyn/Desktop/PhotoPi_Vr2/PhotoPi",
+    "plant_name": "Test_14_",
+    "folder_path": "/Users/Evelyn/Desktop/PhotoPi_Vr2",
     "camera_c": 1,
-    "camera_d": 1
+    "camera_d": 1,
+    "pi_hostname": "10.205.10.29",
+    "folderWithDate_path": "/Users/Evelyn/Desktop/PhotoPi_Vr2/Test_14_2024-05-17-1457"
 }

@@ -5,6 +5,7 @@ import json
 from datetime import datetime, timedelta
 from inspection import CameraSystem
 import paramiko
+
 from credentials import NetworkConfig
 from config import Config
 from network import NetworkManager
@@ -37,6 +38,8 @@ class InputGUI:
 
             if net_config.hostname:
                 self.network_manager = NetworkManager(net_config.hostname, net_config.username, net_config.password)
+                self.config.set_value('pi_hostname', net_config.hostname)
+                self.config.save_config()
                 return True
             else:
                 print("Network Error", "Failed to locate the Raspberry Pi on the network.")
@@ -153,6 +156,11 @@ class InputGUI:
         folder_path = self.folder_path_entry.get()
         print("Folder path: {}".format(folder_path))
 
+        today = datetime.now()
+        the_time = '%04d-%02d-%02d-%02d%02d' % (today.year, today.month, today.day, today.hour, today.minute)
+        timestamp = plant_name + ''  + the_time
+        folderWithDate = folder_path + '/' + str(timestamp)
+
         # Update configuration using the instance of Config
         self.config.set_value('camera_a', camera_a)
         self.config.set_value('camera_b', camera_b)
@@ -162,6 +170,7 @@ class InputGUI:
         self.config.set_value('seconds', seconds)
         self.config.set_value('plant_name', plant_name)
         self.config.set_value('folder_path', folder_path)
+        self.config.set_value('folderWithDate_path', folderWithDate)
 
         # Save the updated configuration
         self.config.save_config()
