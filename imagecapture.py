@@ -1,6 +1,7 @@
 import paramiko
 import json
 import os
+import time
 
 class CameraSystem:
     def __init__(self, ssh_client, config_path='params.json'):
@@ -18,6 +19,14 @@ class CameraSystem:
         except json.JSONDecodeError:
             print("Error decoding JSON from the configuration file.")
             return {}
+    
+    def angle_to_steps(self, angle):
+        return int(angle * (1/0.18))
+
+
+    def full_rev_count(self, angle):
+        return 360/angle
+    
 
     def inspect(self):
         folder_with_date = self.config.get("folderWithDate_path")
@@ -36,9 +45,33 @@ class CameraSystem:
         plant_folder = folder_with_date.rsplit('/', 1)[-1] if folder_with_date else 'default_folder'
         stdin,stdout,stderr = self.ssh_client.exec_command(f'sudo mkdir -p /home/pi/Images/{plant_folder}/images')
 
-        for camera_id in ['A', 'B', 'C', 'D']:
-            if self.config.get(f"camera_{camera_id.lower()}", 0) == 1:
-                self.capture_image(plant_folder, self.config.get("plant_name", "Unknown"), self.config.get('Dates', '20240101'), camera_id, 'images')
+        folder_with_date = self.config.get("folderWithDate_path")
+
+        ANGLE = int(self.config.get("angle"))
+        SECONDS = int(self.config.get("seconds"))
+
+        #stdin,stdout,stderr = client.exec_command(f'sudo mkdir -p /home/pi/Images/{plant_folder}/inspect')
+
+        steps = self.angle_to_steps(int(ANGLE))
+        count = self.full_rev_count(ANGLE)
+
+
+
+        j = 0
+
+        while j < count-1:
+            time.sleep(SECONDS)
+
+            for camera_id in ['A', 'B', 'C', 'D']:
+                if self.config.get(f"camera_{camera_id.lower()}", 0) == 1:
+                    self.capture_image(plant_folder, self.config.get("plant_name", "Unknown"), self.config.get('Dates', '20240101')+f'_00{j}', camera_id, 'images')
+
+
+            #{plant_name}_Camera_D_{the_time}_00{j}.jpg
+            j += 1
+
+
+
 
         self.transfer_images(plant_folder, 'images')
 
