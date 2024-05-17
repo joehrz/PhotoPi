@@ -26,17 +26,34 @@ class CameraSystem:
 
         for camera_id in ['A', 'B', 'C', 'D']:
             if self.config.get(f"camera_{camera_id.lower()}", 0) == 1:
-                self.capture_image(plant_folder, self.config.get("plant_name", "Unknown"), self.config.get('Dates', '20240101'), camera_id)
+                self.capture_image(plant_folder, self.config.get("plant_name", "Unknown"), self.config.get('Dates', '20240101'), camera_id, 'inspect')
 
-        self.transfer_images(plant_folder)
+        self.transfer_images(plant_folder, 'inspect')
 
-    def capture_image(self, plant_folder, plant_name, the_time, camera_id):
+
+    def imaging(self):
+        folder_with_date = self.config.get("folderWithDate_path")
+        plant_folder = folder_with_date.rsplit('/', 1)[-1] if folder_with_date else 'default_folder'
+        stdin,stdout,stderr = self.ssh_client.exec_command(f'sudo mkdir -p /home/pi/Images/{plant_folder}/images')
+
+        for camera_id in ['A', 'B', 'C', 'D']:
+            if self.config.get(f"camera_{camera_id.lower()}", 0) == 1:
+                self.capture_image(plant_folder, self.config.get("plant_name", "Unknown"), self.config.get('Dates', '20240101'), camera_id, 'images')
+
+        self.transfer_images(plant_folder, 'images')
+
+
+
+
+
+
+    def capture_image(self, plant_folder, plant_name, the_time, camera_id, image_folder):
         command = f'sudo i2cset -y 10 0x24 0x24 {self.get_camera_code(camera_id)} \n' \
                   f'libcamera-jpeg --sharpness 2.0 -t 5000 --viewfinder-width 2312 ' \
                   f'--viewfinder-height 1736 --width 4056 --height 3040 --roi 0.28,0.28,0.41,0.41 ' \
                   f'-o {plant_name}_Camera_{camera_id}_{the_time}.jpg --exif EXIF.FocalLength=51/10 ' \
                   f'--exif EXIF.FNumber=9/5 --autofocus \n ' \
-                  f'sudo mv {plant_name}_Camera_{camera_id}_{the_time}.jpg /home/pi/Images/{plant_folder}/inspect'
+                  f'sudo mv {plant_name}_Camera_{camera_id}_{the_time}.jpg /home/pi/Images/{plant_folder}/{image_folder}'
         stdin, stdout, stderr = self.ssh_client.exec_command(command)
         print(f"Camera: {camera_id} imaging done", stdout.read())
 
@@ -44,9 +61,9 @@ class CameraSystem:
         camera_codes = {'A': '0x32', 'B': '0x22', 'C': '0x12', 'D': '0x02'}
         return camera_codes.get(camera_id, '0x32')
 
-    def transfer_images(self, plant_folder):
+    def transfer_images(self, plant_folder, image_folder):
         local_dir = self.config.get("folder_path", "/default/path")
-        remote_dir = f"/home/pi/Images/{plant_folder}"
+        remote_dir = f"/home/pi/Images/{plant_folder}/{image_folder}"
         pi_hostname = self.config.get("pi_hostname")
         os.system(f"scp -r pi@{pi_hostname}:{remote_dir} {local_dir}")
         print("Images transferred to", local_dir)

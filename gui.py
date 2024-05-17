@@ -3,7 +3,7 @@ from tkinter import filedialog
 import time
 import json
 from datetime import datetime, timedelta
-from inspection import CameraSystem
+from imagecapture import CameraSystem
 import paramiko
 
 from credentials import NetworkConfig
@@ -133,7 +133,7 @@ class InputGUI:
         #tk.Button(self.master, text="Inspect Images", command=self.inspect).grid(row=10, column=0)
         tk.Button(self.master, text="Inspect Images", command=self.perform_inspection).grid(row=10, column=0)
 
-        #tk.Button(master, text="Start Imaging", command=self.start_imaging).grid(row=10, column=1)
+        tk.Button(self.master, text="Start Imaging", command=self.start_imaging).grid(row=10, column=1)
 
         tk.Button(self.master, text="Quit", command=self.master.quit).grid(row=10, column=2)
 
@@ -171,6 +171,7 @@ class InputGUI:
         self.config.set_value('plant_name', plant_name)
         self.config.set_value('folder_path', folder_path)
         self.config.set_value('folderWithDate_path', folderWithDate)
+        self.config.set_value('Dates', the_time)
 
         # Save the updated configuration
         self.config.save_config()
@@ -191,6 +192,15 @@ class InputGUI:
             camera_system = CameraSystem(self.ssh_client)
             camera_system.inspect()
             print("Inspection performed successfully.")
+        else:
+            print("SSH client is not initialized.")
+
+    def start_imaging(self):
+        """Create and use the CameraSystem instance for imaging."""
+        if hasattr(self, 'ssh_client'):
+            camera_system = CameraSystem(self.ssh_client)
+            camera_system.imaging()
+            print("Imaging started successfully.")
         else:
             print("SSH client is not initialized.")
         

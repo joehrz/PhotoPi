@@ -2,11 +2,12 @@
     "camera_a": 1,
     "camera_b": 1,
     "angle": "10",
-    "seconds": "3",
-    "plant_name": "Test_14_",
+    "seconds": "5",
+    "plant_name": "Test_23_",
     "folder_path": "/Users/Evelyn/Desktop/PhotoPi_Vr2",
-    "camera_c": 1,
-    "camera_d": 1,
+    "camera_c": 0,
+    "camera_d": 0,
     "pi_hostname": "10.205.10.29",
-    "folderWithDate_path": "/Users/Evelyn/Desktop/PhotoPi_Vr2/Test_14_2024-05-17-1457"
+    "folderWithDate_path": "/Users/Evelyn/Desktop/PhotoPi_Vr2/Test_23_2024-05-17-1542",
+    "Dates": "2024-05-17-1542"
 }
