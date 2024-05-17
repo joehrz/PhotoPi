@@ -96,7 +96,7 @@ class CameraSystem:
 
     def transfer_images(self, plant_folder, image_folder):
         local_dir = self.config.get("folder_path", "/default/path")
-        remote_dir = f"/home/pi/Images/{plant_folder}/{image_folder}"
+        remote_dir = f"/home/pi/Images/{plant_folder}"
         pi_hostname = self.config.get("pi_hostname")
         os.system(f"scp -r pi@{pi_hostname}:{remote_dir} {local_dir}")
         print("Images transferred to", local_dir)
