@@ -3,9 +3,9 @@ from tkinter import filedialog
 import time
 import json
 from datetime import datetime, timedelta
-from imagecapture import CameraSystem
 import paramiko
 
+from imagecapture import CameraSystem
 from credentials import NetworkConfig
 from config import Config
 from network import NetworkManager
@@ -189,7 +189,8 @@ class InputGUI:
     def perform_inspection(self):
         """Create and use the CameraSystem instance for inspection."""
         if hasattr(self, 'ssh_client'):
-            camera_system = CameraSystem(self.ssh_client)
+            #camera_system = CameraSystem(self.ssh_client)
+            camera_system = CameraSystem(self.ssh_client, root)
             camera_system.inspect()
             print("Inspection performed successfully.")
         else:
@@ -198,7 +199,7 @@ class InputGUI:
     def start_imaging(self):
         """Create and use the CameraSystem instance for imaging."""
         if hasattr(self, 'ssh_client'):
-            camera_system = CameraSystem(self.ssh_client)
+            camera_system = CameraSystem(self.ssh_client, root)
             camera_system.imaging()
             print("Imaging started successfully.")
         else:

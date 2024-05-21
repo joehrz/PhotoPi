@@ -3,11 +3,22 @@ import json
 import os
 import time
 
+import io
+from PIL import Image, ImageTk
+import tkinter as tk
+
 class CameraSystem:
-    def __init__(self, ssh_client, config_path='params.json'):
+    def __init__(self, ssh_client, gui_root, config_path='params.json'):
+        self.gui_root = gui_root
         self.ssh_client = ssh_client
         self.config_path = config_path
         self.config = self.load_config()
+
+        self.image_frame = tk.Frame(self.gui_root)  # Create a frame to hold image labels
+        self.image_frame.grid(row=0, column=0)  # Position the frame
+        self.image_index = 0  # Index to track the current image being displayed
+        self.images = []  # List to store PhotoImages
+        self.image_label = None  # Label to display images
 
     def load_config(self):
         try:
@@ -36,8 +47,9 @@ class CameraSystem:
         for camera_id in ['A', 'B', 'C', 'D']:
             if self.config.get(f"camera_{camera_id.lower()}", 0) == 1:
                 self.capture_image(plant_folder, self.config.get("plant_name", "Unknown"), self.config.get('Dates', '20240101'), camera_id, 'inspect')
-
-        self.transfer_images(plant_folder, 'inspect')
+        
+        self.fetch_and_display_images(f'/home/pi/Images/{plant_folder}/inspect')
+        #self.transfer_images(plant_folder, 'inspect')
 
 
     def imaging(self):
@@ -70,6 +82,12 @@ class CameraSystem:
             #{plant_name}_Camera_D_{the_time}_00{j}.jpg
             j += 1
 
+            cmd = f'python /home/pi/Turntable.py {steps}'
+
+
+            stdin, stdout, stderr = self.ssh_client.exec_command(cmd)
+
+            print(stdout.read())
 
 
 
@@ -93,6 +111,63 @@ class CameraSystem:
     def get_camera_code(self, camera_id):
         camera_codes = {'A': '0x32', 'B': '0x22', 'C': '0x12', 'D': '0x02'}
         return camera_codes.get(camera_id, '0x32')
+    
+    def fetch_and_display_images(self, image_directory):
+        raw_images = []
+        try:
+            sftp_client = self.ssh_client.open_sftp()
+            file_list = sftp_client.listdir(image_directory)
+            for file_name in file_list:
+                if file_name.endswith(('.png', '.jpg', '.jpeg')):  # Filter for image files
+                    file_path = os.path.join(image_directory, file_name)
+                    with sftp_client.open(file_path, 'rb') as file_handle:
+                        raw_images.append(file_handle.read())
+        except Exception as e:
+            print(f"An error occurred while fetching images: {e}")
+        finally:
+            sftp_client.close()
+        
+        # Convert raw image data to PhotoImages and store them
+        self.images = [self.resize_image(img_data) for img_data in raw_images]
+        self.create_image_window()  # Display images in a new window
+
+    def resize_image(self, image_data):
+        max_size = (800, 600)  # Set max size to which images should be resized
+        image = Image.open(io.BytesIO(image_data))
+        image.thumbnail(max_size, Image.ANTIALIAS)
+        return ImageTk.PhotoImage(image)
+
+    def create_image_window(self):
+        if not self.images:
+            print("No images to display.")
+            return
+        
+        window = tk.Toplevel(self.gui_root)
+        window.title("Image Inspection")
+        self.image_label = tk.Label(window)
+        self.image_label.pack()
+
+        # Navigation buttons
+        btn_prev = tk.Button(window, text="<< Previous", command=self.show_previous_image)
+        btn_prev.pack(side="left")
+        btn_next = tk.Button(window, text="Next >>", command=self.show_next_image)
+        btn_next.pack(side="right")
+
+        self.show_image(0)  # Show the first image
+
+    def show_image(self, index):
+        if 0 <= index < len(self.images):
+            self.image_index = index
+            self.image_label.config(image=self.images[index])  # Update the label with the current image
+
+    def show_next_image(self):
+        if self.image_index < len(self.images) - 1:
+            self.show_image(self.image_index + 1)
+
+    def show_previous_image(self):
+        if self.image_index > 0:
+            self.show_image(self.image_index - 1)
+
 
     def transfer_images(self, plant_folder, image_folder):
         local_dir = self.config.get("folder_path", "/default/path")
