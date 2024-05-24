@@ -56,7 +56,7 @@ class NetworkConfig:
             self.hostname = socket.gethostbyname('raspberrypi.local')
             messagebox.showinfo("Network Info", f"Raspberry Pi found at IP: {self.hostname}", parent=self.root)
         except socket.error:
-            #print("Network Error", "Failed to locate Raspberry Pi on the network.")
+            #pyprint("Network Error", "Failed to locate Raspberry Pi on the network.")
             messagebox.showerror("Network Error", "Failed to locate Raspberry Pi on the network.", parent=self.root)
 
     def get_credentials(self):
