@@ -39,7 +39,7 @@ class CameraSystem:
         return 360/angle
 
     def inspect(self):
-        folder_with_date = self.config.get("folderWithDate_path")
+        folder_with_date = self.config.get("folder_with_date")
         plant_folder = folder_with_date.rsplit('/', 1)[-1] if folder_with_date else 'default_folder'
         stdin,stdout,stderr = self.ssh_client.exec_command(f'sudo mkdir -p /home/pi/Images/{plant_folder}/inspect')
 
@@ -50,7 +50,7 @@ class CameraSystem:
         self.fetch_and_display_images(f'/home/pi/Images/{plant_folder}/inspect')
 
     def imaging(self):
-        folder_with_date = self.config.get("folderWithDate_path")
+        folder_with_date = self.config.get("folder_with_date")
         plant_folder = folder_with_date.rsplit('/', 1)[-1] if folder_with_date else 'default_folder'
         stdin,stdout,stderr = self.ssh_client.exec_command(f'sudo mkdir -p /home/pi/Images/{plant_folder}/images')
 
