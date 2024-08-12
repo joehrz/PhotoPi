@@ -1,0 +1,3 @@
+RPi.GPIO
+adafruit-circuitpython-motorkit
+adafruit-circuitpython-motor

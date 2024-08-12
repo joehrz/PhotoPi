@@ -1,36 +1,74 @@
 import paramiko
 import json
 import os
-import time
-
+import re
 import io
+import logging
 from PIL import Image, ImageTk
 import tkinter as tk
+from dotenv import load_dotenv
+import time
 
-class CameraSystem:
-    def __init__(self, ssh_client, gui_root, config_path='params.json'):
-        self.gui_root = gui_root
-        self.ssh_client = ssh_client
+# Load environment variables from a .env file
+load_dotenv()
+
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
+class ConfigLoader:
+    def __init__(self, config_path='params.json'):
         self.config_path = config_path
-        self.config = self.load_config()
 
-        self.image_frame = tk.Frame(self.gui_root)  # Create a frame to hold image labels
-        self.image_frame.grid(row=0, column=0)  # Position the frame
-        self.image_index = 0  # Index to track the current image being displayed
-        self.images = []  # List to store PhotoImages
-        self.image_label = None  # Label to display images
-        self.camera_labels = {}  # Dictionary to store camera labels for images
-
-    def load_config(self):
+    def load(self):
         try:
             with open(self.config_path, 'r') as f:
                 return json.load(f)
-        except FileNotFoundError:
-            print("Configuration file not found.")
+        except (FileNotFoundError, json.JSONDecodeError) as e:
+            logging.error(f"Error loading configuration: {e}")
             return {}
-        except json.JSONDecodeError:
-            print("Error decoding JSON from the configuration file.")
-            return {}
+
+class SSHClientWrapper:
+    def __init__(self, ssh_client):
+        self.ssh_client = ssh_client
+
+    def execute_command(self, command):
+        try:
+            stdin, stdout, stderr = self.ssh_client.exec_command(command)
+            output = stdout.read().decode()
+            error = stderr.read().decode()
+            if error:
+                logging.error(f"Error: {error}")
+            return output
+        except Exception as e:
+            logging.error(f"SSH command execution failed: {e}")
+            return ""
+
+    def transfer_files(self, remote_path, local_path):
+        try:
+            sftp_client = self.ssh_client.open_sftp()
+            file_list = sftp_client.listdir(remote_path)
+            for file_name in file_list:
+                remote_file = os.path.join(remote_path, file_name)
+                local_file = os.path.join(local_path, file_name)
+                sftp_client.get(remote_file, local_file)
+            sftp_client.close()
+            logging.info(f"Files transferred to {local_path}")
+        except Exception as e:
+            logging.error(f"File transfer failed: {e}")
+
+class CameraSystem:
+    def __init__(self, ssh_client, gui_root, config_loader):
+        self.gui_root = gui_root
+        self.ssh_client = SSHClientWrapper(ssh_client)
+        self.config_loader = config_loader
+        self.config = self.config_loader.load()
+
+        self.image_frame = tk.Frame(self.gui_root)
+        self.image_frame.grid(row=0, column=0)
+        self.image_index = 0
+        self.images = []
+        self.image_label = None
+        self.camera_labels = {}
     
     def angle_to_steps(self, angle):
         return int(angle * (1/0.18))
@@ -41,7 +79,7 @@ class CameraSystem:
     def inspect(self):
         folder_with_date = self.config.get("folder_with_date")
         plant_folder = folder_with_date.rsplit('/', 1)[-1] if folder_with_date else 'default_folder'
-        stdin,stdout,stderr = self.ssh_client.exec_command(f'sudo mkdir -p /home/pi/Images/{plant_folder}/inspect')
+        self.ssh_client.execute_command(f'sudo mkdir -p /home/pi/Images/{plant_folder}/inspect')
 
         for camera_id in ['A', 'B', 'C', 'D']:
             if self.config.get(f"camera_{camera_id.lower()}", 0) == 1:
@@ -52,7 +90,7 @@ class CameraSystem:
     def imaging(self):
         folder_with_date = self.config.get("folder_with_date")
         plant_folder = folder_with_date.rsplit('/', 1)[-1] if folder_with_date else 'default_folder'
-        stdin,stdout,stderr = self.ssh_client.exec_command(f'sudo mkdir -p /home/pi/Images/{plant_folder}/images')
+        self.ssh_client.execute_command(f'sudo mkdir -p /home/pi/Images/{plant_folder}/images')
 
         ANGLE = int(self.config.get("angle"))
         SECONDS = int(self.config.get("seconds"))
@@ -72,8 +110,7 @@ class CameraSystem:
             j += 1
 
             cmd = f'python /home/pi/Turntable.py {steps}'
-            stdin, stdout, stderr = self.ssh_client.exec_command(cmd)
-            print(stdout.read())
+            self.ssh_client.execute_command(cmd)
 
         self.transfer_images(plant_folder, 'images')
 
@@ -85,8 +122,8 @@ class CameraSystem:
                   f'-o {file_name} --exif EXIF.FocalLength=51/10 ' \
                   f'--exif EXIF.FNumber=9/5 --autofocus \n ' \
                   f'sudo mv {file_name} /home/pi/Images/{plant_folder}/{image_folder}'
-        stdin, stdout, stderr = self.ssh_client.exec_command(command)
-        print(f"Camera: {camera_id} imaging done", stdout.read())
+        self.ssh_client.execute_command(command)
+        print(f"Camera: {camera_id} imaging done")
         # Store the camera label for the image
         self.camera_labels[file_name] = camera_id
 
@@ -95,35 +132,38 @@ class CameraSystem:
         return camera_codes.get(camera_id, '0x32')
     
     def fetch_and_display_images(self, image_directory):
+        raw_images = self.fetch_images(image_directory)
+        self.images = [(self.resize_image(img_data), file_name) for img_data, file_name in raw_images]
+        self.images.sort(key=lambda x: self.camera_labels.get(x[1], "Unknown"))  # Sort images based on camera labels
+        self.create_image_window()
+
+    def fetch_images(self, image_directory):
         raw_images = []
         try:
-            sftp_client = self.ssh_client.open_sftp()
+            sftp_client = self.ssh_client.ssh_client.open_sftp()
             file_list = sftp_client.listdir(image_directory)
             for file_name in file_list:
-                if file_name.endswith(('.png', '.jpg', '.jpeg')):  # Filter for image files
+                if file_name.endswith(('.png', '.jpg', '.jpeg')):
                     file_path = os.path.join(image_directory, file_name)
                     with sftp_client.open(file_path, 'rb') as file_handle:
                         raw_images.append((file_handle.read(), file_name))
         except Exception as e:
-            print(f"An error occurred while fetching images: {e}")
+            logging.error(f"An error occurred while fetching images: {e}")
         finally:
             sftp_client.close()
-        
-        # Convert raw image data to PhotoImages and store them
-        self.images = [(self.resize_image(img_data), file_name) for img_data, file_name in raw_images]
-        self.create_image_window()  # Display images in a new window
+        return raw_images
 
     def resize_image(self, image_data):
-        max_size = (800, 600)  # Set max size to which images should be resized
+        max_size = (800, 600)
         image = Image.open(io.BytesIO(image_data))
-        image.thumbnail(max_size, Image.ANTIALIAS)
+        image.thumbnail(max_size, Image.Resampling.LANCZOS)
         return ImageTk.PhotoImage(image)
 
     def create_image_window(self):
         if not self.images:
-            print("No images to display.")
+            logging.info("No images to display.")
             return
-        
+
         window = tk.Toplevel(self.gui_root)
         window.title("Image Inspection")
         self.image_label = tk.Label(window)
@@ -132,19 +172,16 @@ class CameraSystem:
         self.camera_info_label = tk.Label(window, text="")
         self.camera_info_label.pack()
 
-        # Navigation buttons
-        btn_prev = tk.Button(window, text="<< Previous", command=self.show_previous_image)
-        btn_prev.pack(side="left")
-        btn_next = tk.Button(window, text="Next >>", command=self.show_next_image)
-        btn_next.pack(side="right")
+        tk.Button(window, text="<< Previous", command=self.show_previous_image).pack(side="left")
+        tk.Button(window, text="Next >>", command=self.show_next_image).pack(side="right")
 
-        self.show_image(0)  # Show the first image
+        self.show_image(0)
 
     def show_image(self, index):
         if 0 <= index < len(self.images):
             self.image_index = index
             image, file_name = self.images[index]
-            self.image_label.config(image=image)  # Update the label with the current image
+            self.image_label.config(image=image)
             camera_id = self.camera_labels.get(file_name, "Unknown")
             self.camera_info_label.config(text=f"Camera: {camera_id}")
 
@@ -158,16 +195,20 @@ class CameraSystem:
 
     def transfer_images(self, plant_folder, image_folder):
         local_dir = self.config.get("folder_path", "/default/path")
-        remote_dir = f"/home/pi/Images/{plant_folder}"
-        pi_hostname = self.config.get("pi_hostname")
-        os.system(f"scp -r pi@{pi_hostname}:{remote_dir} {local_dir}")
-        print("Images transferred to", local_dir)
+        remote_dir = f"/home/pi/Images/{plant_folder}/{image_folder}"
+        self.ssh_client.transfer_files(remote_dir, local_dir)
+
 
 # Ensure that the CameraSystem instance is used properly
 if __name__ == "__main__":
     client = paramiko.SSHClient()
     client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-    client.connect('raspberrypi.local', username='pi', password='your_password')  # Use real credentials
-    camera_system = CameraSystem(client, tk.Tk())
-    camera_system.inspect()
-    client.close()
+    try:
+        pi_username = os.getenv('PI_USERNAME')
+        pi_password = os.getenv('PI_PASSWORD')
+        client.connect('raspberrypi.local', username=pi_username, password=pi_password)
+        config_loader = ConfigLoader()
+        camera_system = CameraSystem(client, tk.Tk(), config_loader)
+        camera_system.inspect()
+    finally:
+        client.close()

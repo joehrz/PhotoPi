@@ -1,5 +1,8 @@
 import json
+import logging
 
+# Create a module-specific logger
+logger = logging.getLogger(__name__)
 
 class Config:
     """
@@ -16,12 +19,15 @@ class Config:
             filepath (str): The file path to the JSON configuration file. Defaults to 'params.json'.
         """
         self.filepath = filepath
-        self.data = self.load_config()
+        self.data = self.load()
 
-    def load_config(self):
+    def load(self):
         """
         Attempts to load the configuration from the specified JSON file, initializing
-        with defaults if the file is absent.
+        with defaults if the file is absent or invalid.
+
+        Returns:
+            dict: The loaded configuration data.
         """
         try:
             with open(self.filepath, 'r') as f:
@@ -30,6 +36,10 @@ class Config:
                     return self.initialize_defaults()
                 return data
         except FileNotFoundError:
+            logger.warning(f"Configuration file {self.filepath} not found. Initializing with default settings.")
+            return self.initialize_defaults()
+        except json.JSONDecodeError as e:
+            logger.error(f"Error decoding JSON from {self.filepath}: {e}")
             return self.initialize_defaults()
 
     def initialize_defaults(self):
@@ -39,8 +49,7 @@ class Config:
         Returns:
             dict: A dictionary containing default settings.
         """
-        # Example defaults; customize as necessary
-        return {
+        defaults = {
             "camera_a": 0,
             "camera_b": 0,
             "angle": 90,
@@ -48,7 +57,9 @@ class Config:
             "plant_name": "Default Plant",
             "folder_path": "/path/to/default"
         }
-    
+        logger.info("Initialized with default settings.")
+        return defaults
+
     def save_config(self):
         """
         Attempts to save the current configuration data to the JSON file.
@@ -57,9 +68,9 @@ class Config:
         try:
             with open(self.filepath, 'w') as f:
                 json.dump(self.data, f, indent=4)
+            logger.info(f"Configuration saved to {self.filepath}.")
         except IOError as e:
-            # Log the error or inform the user
-            print(f"Failed to save configuration: {e}")
+            logger.error(f"Failed to save configuration to {self.filepath}: {e}")
 
     def get_value(self, key):
         """
@@ -71,7 +82,9 @@ class Config:
         Returns:
             The value associated with the key, or None if the key is not found.
         """
-        return self.data.get(key, None)
+        value = self.data.get(key, None)
+        logger.debug(f"Retrieved value for key '{key}': {value}")
+        return value
 
     def set_value(self, key, value):
         """
@@ -82,3 +95,4 @@ class Config:
             value: The value to be set for the given key.
         """
         self.data[key] = value
+        logger.debug(f"Set value for key '{key}': {value}")

@@ -1,9 +1,23 @@
 import tkinter as tk
 from tkinter import messagebox
 import socket
+import logging
+
+
+# Create a module-specific logger
+logger = logging.getLogger(__name__)
 
 class CredentialsDialog(tk.Toplevel):
+    """
+    Dialog for entering username and password to connect to Raspberry Pi.
+    """
     def __init__(self, parent):
+        """
+        Initializes the dialog window.
+
+        Parameters:
+            parent (tk.Tk): The parent window.
+        """
         super().__init__(parent)
         self.title("Login to Raspberry Pi")
         self.geometry("300x120")
@@ -20,15 +34,18 @@ class CredentialsDialog(tk.Toplevel):
         # Connect and Cancel buttons
         connect_button = tk.Button(self, text="Connect", command=self.on_connect)
         connect_button.grid(row=2, column=0, padx=10, pady=10, sticky='e')
-        cancel_button = tk.Button(self, text="Cancel", command=self.destroy)  # Use destroy directly for simplicity
+        cancel_button = tk.Button(self, text="Cancel", command=self.destroy)
         cancel_button.grid(row=2, column=1, padx=10, pady=10, sticky='w')
 
-        self.protocol("WM_DELETE_WINDOW", self.destroy)  # Use destroy to handle window close
+        self.protocol("WM_DELETE_WINDOW", self.destroy)  # Handle window close
         self.transient(parent)  # Set to be a transient window of the main window
         self.grab_set()  # Take over input focus
         self.wait_window()  # Block until this window is destroyed
 
     def on_connect(self):
+        """
+        Handles the connect button click event.
+        """
         if not self.username_entry.get() or not self.password_entry.get():
             messagebox.showerror("Error", "Both username and password are required!", parent=self)
             return
@@ -37,13 +54,25 @@ class CredentialsDialog(tk.Toplevel):
         self.destroy()
 
 class NetworkConfig:
+    """
+    Manages network configuration and credentials for connecting to Raspberry Pi.
+    """
     def __init__(self, root):
+        """
+        Initializes the NetworkConfig object.
+
+        Parameters:
+            root (tk.Tk): The root window of the Tkinter application.
+        """
         self.root = root
         self.username = None
         self.password = None
         self.hostname = None
 
     def prompt_credentials(self):
+        """
+        Prompts the user for credentials using the CredentialsDialog.
+        """
         dialog = CredentialsDialog(self.root)
         if hasattr(dialog, 'username') and hasattr(dialog, 'password'):
             self.username = dialog.username
@@ -52,12 +81,22 @@ class NetworkConfig:
             raise ValueError("Login cancelled or credentials not provided.")
 
     def discover_pi_hostname(self):
+        """
+        Discovers the hostname of the Raspberry Pi on the local network.
+        """
         try:
             self.hostname = socket.gethostbyname('raspberrypi.local')
             messagebox.showinfo("Network Info", f"Raspberry Pi found at IP: {self.hostname}", parent=self.root)
+            logger.info(f"Raspberry Pi found at IP: {self.hostname}")
         except socket.error:
-            #pyprint("Network Error", "Failed to locate Raspberry Pi on the network.")
             messagebox.showerror("Network Error", "Failed to locate Raspberry Pi on the network.", parent=self.root)
+            logger.error("Failed to locate Raspberry Pi on the network.")
 
     def get_credentials(self):
+        """
+        Returns the stored credentials.
+
+        Returns:
+            tuple: A tuple containing the username, password, and hostname.
+        """
         return self.username, self.password, self.hostname
