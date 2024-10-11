@@ -1,0 +1,30 @@
+sift_extraction:
+  max_image_size: 3200
+  max_num_features: 8192
+  estimate_affine_shape: true
+  domain_size_pooling: true
+
+exhaustive_matcher:
+  guided_matching: true
+  block_size: 75
+  loop_detection_num_images: 30
+
+mapper:
+  ba_local_max_num_iterations: 30
+  ba_global_max_num_iterations: 75
+  ba_global_images_ratio: 1.1
+  ba_global_points_ratio: 1.1
+  ba_global_max_refinements: 5
+  ba_local_max_refinements: 2
+
+patch_match_stereo:
+  max_image_size: 3200
+  window_radius: 5
+  window_step: 1
+  num_samples: 15
+  num_iterations: 5
+  geom_consistency: false
+
+stereo_fusion:
+  check_num_images: 50
+  max_image_size: 3200
