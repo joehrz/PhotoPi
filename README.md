@@ -1,10 +1,10 @@
 # PhotoPi
 
-**PhotoPi** is a Python-based GUI application designed to manage camera systems via SSH, specifically for Raspberry Pi setups. It allows users to control camera settings, capture images, and manage these images remotely. The project utilizes Tkinter for the GUI and Paramiko for SSH communication, making it a robust tool for remote camera management.
+**PhotoPi** is designed for plant photogrammetry, providing a GUI to automate the capture of 2D images used in constructing 3D models of plants. The system controls four cameras and a turntable via a Raspberry Pi, ensuring precise control over the imaging process. The application is operated remotely from a main computer, integrating into photogrammetry workflows. The imaging system is a Python-based GUI application designed to manage camera systems via SSH, specifically for Raspberry Pi setups. It allows users to control camera settings, capture images, and manage these images remotely. The project utilizes Tkinter for the GUI and Paramiko for SSH communication, making it a robust tool for remote camera management.
 
-## Overview
 
-PhotoPi is designed for plant photogrammetry, providing a GUI to automate the capture of 2D images used in constructing 3D models of plants. The system controls four cameras and a turntable via a Raspberry Pi, ensuring precise control over the imaging process. The application is operated remotely from a main computer, integrating into photogrammetry workflows.
+
+
 
 ## Features
 
