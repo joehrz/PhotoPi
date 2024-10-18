@@ -130,6 +130,7 @@ Configuration settings are managed through a JSON file (`params.json`). You can 
 PhotoPi/
 ├── README.md
 ├── deploy_to_pi.sh
+├── deploy_to_remote_server.sh
 │
 ├── main_system/
 │   ├── gui.py
@@ -140,9 +141,30 @@ PhotoPi/
 │   ├── params.json
 │   ├── requirements.txt
 │
-└── raspberry_pi/
-    ├── Turntable.py
-    ├── requirements.txt
+├── remote_server/
+│   ├── build.py
+│   ├── config.yaml
+│
+├── raspberry_pi/
+│   ├── Turntable.py
+│   ├── requirements.txt
+│
+└── point_cloud_analysis/
+    ├── setup.py
+    ├── __init__.py
+    ├── main.py
+    ├── point_cloud/
+    │   ├── __init__.py
+    │   ├── convex_hull.py
+    │   ├── processing.py
+    │   ├── hr_analysis.py
+    │   ├── projection.py
+    │	├── leaf_angles.py
+    │	└── requirement.txt
+    └── utils/
+        ├── __init__.py
+        └── helpers.py
+
 
 
 

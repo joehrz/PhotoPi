@@ -1,0 +1,4 @@
+numpy
+open3d
+matplotlib
+scipy

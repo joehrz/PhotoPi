@@ -57,21 +57,16 @@ def main():
     # Load the point cloud
     point_cloud = load_point_cloud(filename)
 
+
     if point_cloud is not None:
-        # Compute Convex Hull Volume using SciPy
-        points = np.asarray(point_cloud.points)
 
-    # Determine the project root directory
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-    project_root = current_dir  # point_cloud_analysis/
-
-    # Add project root to sys.path
-    if project_root not in sys.path:
-        sys.path.append(project_root)
-
+        # Import functions from submodules using package-based imports
         try:
-            from convex_hull import compute_convex_hull_volume, visualize_convex_hull
-            from hr_analysis import analyze_hr
+            from point_cloud.convex_hull import (
+                compute_convex_hull_volume,
+                visualize_convex_hull,
+            )
+            from point_cloud.hr_analysis import analyze_hr
         except ModuleNotFoundError as e:
             logger.error(f"Failed to import modules: {e}")
             sys.exit(1)
@@ -87,11 +82,6 @@ def main():
         # Perform H/R Analysis
         analysis_results = analyze_hr(point_cloud, scale)
         logger.info(f"Analysis Results: {analysis_results}")
-
-        # Optionally, you can integrate other functionalities here
-        # For example:
-        # from helpers import some_helper_function
-        # some_helper_function()
 
 if __name__ == '__main__':
     main()
