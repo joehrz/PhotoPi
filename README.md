@@ -146,7 +146,7 @@ PhotoPi/
 │   ├── config.yaml
 │
 ├── raspberry_pi/
-│   ├── Turntable.py
+│   ├── turntable.py
 │   ├── requirements.txt
 │
 └── point_cloud_analysis/
