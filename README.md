@@ -133,10 +133,7 @@ PhotoPi/
 ├── requirements.txt
 ├── deploy_to_pi.sh
 ├── deploy_to_remote_server.sh
-<<<<<<< HEAD
-└── photopack/                      # Top-level package
-=======
->>>>>>> 2fab5a5c6d700ddba425a173138e61c6a82421f8
+└── photopack/ 
     ├── __init__.py
     ├── main_system/
     │   ├── __init__.py
