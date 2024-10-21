@@ -129,41 +129,44 @@ Configuration settings are managed through a JSON file (`params.json`). You can 
 ```plaintext
 PhotoPi/
 ├── README.md
+├── setup.py
+├── requirements.txt
 ├── deploy_to_pi.sh
 ├── deploy_to_remote_server.sh
-│
-├── main_system/
-│   ├── gui.py
-│   ├── network.py
-│   ├── credentials.py
-│   ├── config.py
-│   ├── imagecapture.py
-│   ├── params.json
-│   ├── requirements.txt
-│
-├── remote_server/
-│   ├── build.py
-│   ├── config.yaml
-│
-├── raspberry_pi/
-│   ├── Turntable.py
-│   ├── requirements.txt
-│
-└── point_cloud_analysis/
-    ├── setup.py
+└── photopack/                      # Top-level package
     ├── __init__.py
-    ├── main.py
-    ├── point_cloud/
+    ├── main_system/
     │   ├── __init__.py
-    │   ├── convex_hull.py
-    │   ├── processing.py
-    │   ├── hr_analysis.py
-    │   ├── projection.py
-    │	├── leaf_angles.py
-    │	└── requirement.txt
-    └── utils/
+    │   ├── gui.py
+    │   ├── network.py
+    │   ├── credentials.py
+    │   ├── config.py
+    │   ├── imagecapture.py
+    │   ├── params.json
+    │
+    ├── remote_server/
+    │   ├── __init__.py
+    │   ├── build.py
+    │   ├── config.yaml
+    │
+    ├── raspberry_pi/
+    │   ├── __init__.py
+    │   ├── turntable.py
+    │
+    └── point_cloud_analysis/
         ├── __init__.py
-        └── helpers.py
+        ├── main.py
+        ├── point_cloud/
+        │   ├── __init__.py
+        │   ├── convex_hull.py
+        │   ├── processing.py
+        │   ├── hr_analysis.py
+        │   ├── projection.py
+        │   ├── leaf_angles.py
+        │
+        └── utils/
+            ├── __init__.py
+            └── helpers.py
 
 
 

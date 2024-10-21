@@ -1,4 +1,4 @@
-# PhotoPi/point_cloud_analysis/main.py
+# PhotoPi/photopack/point_cloud_analysis/main.py
 
 import argparse
 import open3d as o3d
@@ -59,14 +59,13 @@ def main():
 
 
     if point_cloud is not None:
-
-        # Import functions from submodules using package-based imports
+        # Import functions from submodules using absolute imports
         try:
-            from point_cloud.convex_hull import (
+            from photopack.point_cloud_analysis.point_cloud.convex_hull import (
                 compute_convex_hull_volume,
                 visualize_convex_hull,
             )
-            from point_cloud.hr_analysis import analyze_hr
+            from photopack.point_cloud_analysis.point_cloud.hr_analysis import analyze_hr
         except ModuleNotFoundError as e:
             logger.error(f"Failed to import modules: {e}")
             sys.exit(1)
@@ -85,4 +84,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-
