@@ -1,5 +1,3 @@
-# PhotoPi/setup.py
-
 from setuptools import setup, find_packages
 
 # Define dependencies for each component
@@ -25,6 +23,10 @@ point_cloud_analysis_deps = [
     'open3d',
     'matplotlib',
     'scipy',
+    'scikit-learn',
+    'networkx',
+    'alphashape', 
+    'shapely',  
 ]
 
 # Combine all dependencies for the 'all' option
@@ -54,7 +56,7 @@ setup(
         'console_scripts': [
             'photopack-main=photopack.main_system.gui:main',
             'photopack-analyze=photopack.point_cloud_analysis.main:main',
-            'photopack-turntable=photopack.raspberry_pi.Turntable:main',
+            'photopack-turntable=photopack.raspberry_pi.turntable:main',
         ],
     },
 )

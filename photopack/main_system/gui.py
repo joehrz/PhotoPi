@@ -1,3 +1,5 @@
+# PhotoPi/photopack/main_system/gui.py
+
 import tkinter as tk
 from tkinter import filedialog
 import time
@@ -372,3 +374,4 @@ if __name__ == "__main__":
     root = tk.Tk()
     app = InputGUI(root)
     root.mainloop()
+

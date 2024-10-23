@@ -45,29 +45,32 @@ class PointCloudProcessor:
         """
         self.centroid = np.mean(self.points, axis=0)
         self.points -= self.centroid
-        self.point_cloud.points = o3d.utility.Vector3dVector(self.points)
         logger.info("Point cloud centered at the origin.")
 
-    def filter_turntable_points(self, lower_threshold, upper_threshold):
+
+    def filter_non_points(self, lower_threshold, upper_threshold):
         """
-        Filters out plant points based on color thresholds, keeping the turntable points.
+        Filters out points that do not have color values within the specified lower and upper thresholds.
 
         Args:
             lower_threshold (np.ndarray): Lower RGB color threshold.
             upper_threshold (np.ndarray): Upper RGB color threshold.
         """
-        # Identify points outside the plant color thresholds
+        # Identify points outside the specified color thresholds
         outside_threshold_indices = np.all(
             (self.colors < lower_threshold) | (self.colors > upper_threshold), axis=1
         )
-        turntable_points = self.points[outside_threshold_indices]
-        turntable_colors = self.colors[outside_threshold_indices]
+        # Keep points within the thresholds
+        in_threshold_indices = outside_threshold_indices
+        filtered_points = self.points[in_threshold_indices]
+        filtered_colors = self.colors[in_threshold_indices]
 
-        # Create a point cloud of turntable points
-        self.turntable_pcd = o3d.geometry.PointCloud()
-        self.turntable_pcd.points = o3d.utility.Vector3dVector(turntable_points)
-        self.turntable_pcd.colors = o3d.utility.Vector3dVector(turntable_colors)
-        logger.info(f"Filtered turntable points. Number of turntable points: {len(turntable_points)}")
+        # Update the point cloud to contain only the filtered points
+        self.point_cloud.points = o3d.utility.Vector3dVector(filtered_points)
+        self.point_cloud.colors = o3d.utility.Vector3dVector(filtered_colors)
+        self.points = np.asarray(self.point_cloud.points)
+        self.colors = np.asarray(self.point_cloud.colors)
+        logger.info(f"Filtered points based on color thresholds. Remaining points: {len(filtered_points)}")
 
     def segment_plane(self, distance_threshold=0.01, ransac_n=3, num_iterations=1000):
         """
@@ -78,23 +81,28 @@ class PointCloudProcessor:
             ransac_n (int): Number of initial points to estimate a plane.
             num_iterations (int): Number of RANSAC iterations.
         """
-        plane_model, inliers = self.turntable_pcd.segment_plane(
+        plane_model, inliers = self.point_cloud.segment_plane(
             distance_threshold=distance_threshold,
             ransac_n=ransac_n,
             num_iterations=num_iterations
         )
         self.plane_model = plane_model
         self.plane_inliers = inliers
+        self.plane_cloud = self.point_cloud.select_by_index(inliers)
+        self.outlier_cloud = self.point_cloud.select_by_index(inliers, invert=True)
+
+
         logger.info(f"Plane model estimated: {plane_model}")
+
 
     def align_to_z_axis(self):
         """
         Rotates the point cloud so that the plane normal aligns with the Z-axis.
         """
         normal_vector = np.array(self.plane_model[:3])
-        normal_vector = normal_vector / np.linalg.norm(normal_vector)
-        # Ensure the normal vector points upwards
-        if normal_vector[2] < 0:
+        direction_vector = np.mean(np.asarray(self.outlier_cloud.points), axis=0) - np.mean(np.asarray(self.plane_cloud.points), axis=0)
+
+        if np.dot(normal_vector, direction_vector) < 0:
             normal_vector = -normal_vector
 
         z_axis = np.array([0, 0, 1])
@@ -106,20 +114,17 @@ class PointCloudProcessor:
             rotation_axis = rotation_axis / np.linalg.norm(rotation_axis)
             angle = np.arccos(np.clip(np.dot(normal_vector, z_axis), -1.0, 1.0))
             rotation_matrix = R.from_rotvec(angle * rotation_axis).as_matrix()
-        self.points = self.points @ rotation_matrix.T
-        self.point_cloud.points = o3d.utility.Vector3dVector(self.points)
+        #np.asarray(outlier_cloud.points)
+        self.points[:] = self.points @ rotation_matrix.T
         logger.info("Point cloud aligned with Z-axis.")
 
     def translate_to_origin(self):
         """
         Translates the point cloud so that the plane aligns with z=0.
         """
-        # The plane equation is ax + by + cz + d = 0
-        # After rotation, the plane should be horizontal, so c ≈ 1, a ≈ b ≈ 0
         d = self.plane_model[3]
-        translation_z = -d / self.plane_model[2]
+        translation_z = abs(d)
         self.points[:, 2] += translation_z
-        self.point_cloud.points = o3d.utility.Vector3dVector(self.points)
         logger.info(f"Point cloud translated along Z by {translation_z} to align plane with z=0.")
 
     def filter_points_by_z_interval(self, z_min=-0.4, z_max=0):
@@ -194,19 +199,18 @@ class PointCloudProcessor:
         """
         self.points[:, 0] -= self.ring_center[0]
         self.points[:, 1] -= self.ring_center[1]
-        self.point_cloud.points = o3d.utility.Vector3dVector(self.points)
         logger.info("Adjusted point cloud center to align ring center with origin.")
 
     def process(self):
         """
-        Orchestrates the processing steps.
+        Starts the processing steps.
         """
         try:
             self.center_point_cloud()
             # Define color thresholds for plant filtering
-            lower_threshold = np.array([0.035, 0.325, 0.8])
-            upper_threshold = np.array([0.094, 0.412, 0.894])
-            self.filter_turntable_points(lower_threshold, upper_threshold)
+            lower_threshold = np.array([0.03529412, 0.3254902, 0.8])
+            upper_threshold = np.array([0.09411765, 0.41176471, 0.89411765])
+            self.filter_non_points(lower_threshold, upper_threshold)
             self.segment_plane()
             self.align_to_z_axis()
             self.translate_to_origin()
@@ -245,4 +249,5 @@ class PointCloudProcessor:
             o3d.visualization.draw_geometries([self.processed_point_cloud, coordinate_frame])
         else:
             logger.error("Processed point cloud is None. Cannot visualize.")
+
 

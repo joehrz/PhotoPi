@@ -49,6 +49,8 @@ def main():
     ring_diameter = args.diameter
     modules_to_run = args.module
 
+
+
     # Compute scale factor based on the turntable diameter
     scale = TURNTABLE_DIAMETER / ring_diameter
 
@@ -81,6 +83,15 @@ def main():
                 logger.error(f"Failed to import processing module: {e}")
                 sys.exit(1)
 
+
+
+            work_dir = filename.rsplit('\\', 1)[-1]
+            main_dir = filename.rsplit('\\', 1)[0]
+
+            out = work_dir.rsplit('.', 1)[0]
+
+
+            output_path = os.path.join(main_dir, out +'_output.ply')
             # Initialize the PointCloudProcessor
             processor = PointCloudProcessor(point_cloud)
 
@@ -88,8 +99,9 @@ def main():
             processor.process()
 
             # Save the processed point cloud
-            output_path = 'processed_point_cloud.ply'
+            #output_path = 'processed_point_cloud.ply'
             processor.save_processed_point_cloud(output_path)
+            processor.visualize()
 
 
         # Import and run modules based on command-line arguments
