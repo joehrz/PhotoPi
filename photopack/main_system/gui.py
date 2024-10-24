@@ -370,8 +370,10 @@ class InputGUI:
         if reboot_confirmation:
             self.reboot_raspberry_pi()
 
-if __name__ == "__main__":
+def main():
     root = tk.Tk()
     app = InputGUI(root)
     root.mainloop()
 
+if __name__ == "__main__":
+    main()

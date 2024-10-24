@@ -1,3 +1,5 @@
+# PhotoPi/photopack/main_system/network.py
+
 import paramiko
 import logging
 
