@@ -1,6 +1,6 @@
 # PhotoPi
 
-**PhotoPi** is a Python-based GUI application designed for plant photogrammetry. It automates the capture of 2D images to construct 3D models of plants. The system controls multiple cameras and a turntable via a Raspberry Pi, ensuring precise management of the imaging process. Operated remotely from a main computer, PhotoPi integrates into photogrammetry workflows and offers robust tools for point cloud analysis.
+**PhotoPi** is a Python-based GUI application designed for 3D plant phenotyping using photogrammetry. It automates the capture of 2D images to construct 3D models of plants. The system controls multiple cameras and a turntable via a Raspberry Pi, ensuring precise management of the imaging process. Operated remotely from a main computer, PhotoPi integrates into photogrammetry workflows and offers robust tools for point cloud analysis.
 
 
 ## Features
@@ -199,7 +199,7 @@ Using the GUI, you can:
 
 ### Remote Server Operations
 
-The Remote Server component is responsible for performing Structure from Motion (SFM) photogrammetry using COLMAP to reconstruct 3D models from the images captured by the Raspberry Pi.
+The Remote Server component is responsible for running Structure from Motion (SfM) photogrammetry using COLMAP to reconstruct 3D models from images captured by the Raspberry Pi.
 
 1. **Deploy to Remote Server:**
 
