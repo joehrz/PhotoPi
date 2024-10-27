@@ -9,7 +9,7 @@ PI_DIR="/home/pi"
 ssh ${PI_USER}@${PI_HOST} "mkdir -p ${PI_DIR}"
 
 # Copy the Raspberry Pi code to the Raspberry Pi
-scp -r raspberry_pi/* ${PI_USER}@${PI_HOST}:${PI_DIR}
+scp -r photopack/raspberry_pi/* ${PI_USER}@${PI_HOST}:${PI_DIR}
 
 # Set up the 64MP Autofocus Synchronized Quad-Camera Kit
 ssh ${PI_USER}@${PI_HOST} << 'EOF'
