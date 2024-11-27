@@ -122,7 +122,8 @@ class CameraSystem:
                   f'libcamera-jpeg --sharpness 2.0 -t 5000 --viewfinder-width 2312 ' \
                   f'--viewfinder-height 1736 --width 4056 --height 3040 --roi 0.28,0.28,0.41,0.41 ' \
                   f'-o {file_name} --exif EXIF.FocalLength=51/10 ' \
-                  f'--exif EXIF.FNumber=9/5 --autofocus \n ' \
+                  f'--autofocus-on-capture --autofocus-mode auto '\
+                  f'--exif EXIF.FNumber=9/5 \n ' \
                   f'sudo mv {file_name} /home/pi/Images/{plant_folder}/{image_folder}'
         self.ssh_client.execute_command(command)
         print(f"Camera: {camera_id} imaging done")
