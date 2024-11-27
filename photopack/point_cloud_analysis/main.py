@@ -53,6 +53,7 @@ def main():
 
     # Compute scale factor based on the turntable diameter
     scale = TURNTABLE_DIAMETER / ring_diameter
+    top_percentage = 60
 
     logger.info(f"Ring Diameter: {ring_diameter} cm")
     logger.info(f"Scale Factor: {scale}")
@@ -122,6 +123,9 @@ def main():
 
             # Visualize Convex Hull (optional)
             convex_hull_analyzer.visualize_convex_hull()
+            
+            percentile_volume = convex_hull_analyzer.process_pc_percentile_volume(top_percentage, scale)
+            logger.info(f"Top {top_percentage}% Convex Hull Volume: {percentile_volume:.2f} cm³")
 
         if 'hr_analysis' in modules_to_run:
             logger.info("Running H/R Analysis module...")
