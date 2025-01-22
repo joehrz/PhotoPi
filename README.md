@@ -53,7 +53,7 @@ PhotoPi consists of several interconnected components:
 ### Remote Server
 
 - **Hardware:**
-  - A server machine with sufficient resources to handle photogrammetry processing tasks
+  - A server machine with sufficient resources to handle 3D reconstruction
 - **Software:**
   - Python 3.x
   - [COLMAP](https://colmap.github.io/) installed and accessible via PATH
@@ -103,24 +103,12 @@ PhotoPi consists of several interconnected components:
     pip install -e .[all]
     ```
 
-    Alternatively, install specific components:
+    For example, installing specific components:
 
     - **Remote Server:**
 
         ```bash
         pip install -e .[remote_server]
-        ```
-
-    - **Point Cloud Analysis:**
-
-        ```bash
-        pip install -e .[point_cloud_analysis]
-        ```
-
-    - **Raspberry Pi:**
-
-        ```bash
-        pip install -e .[raspberry_pi]
         ```
 ### Raspberry Pi Installation
 
