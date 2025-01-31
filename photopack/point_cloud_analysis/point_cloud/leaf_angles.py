@@ -260,54 +260,108 @@ class LeafAngleAnalyzer:
 
     def visualize_results(self):
         """
-        Visualizes the leaf angles with extended lines, arcs, and angle annotations.
+        Visualize the partial geometry: stem, leaf, arcs, etc. 
+        Doesn't include the original cloud, but you can see arcs.
         """
+        logger.info("LeafAngleAnalyzer: visualize_results() - partial geometry.")
         geometries = []
         for i in range(len(self.all_main_stem_points_up)):
-            main_stem_combined = np.vstack((self.all_main_stem_points_up[i], self.all_main_stem_points_down[i]))
-            x_stem, y_stem, z_stem = perform_linear_regression(main_stem_combined)
+            m_stem = np.vstack((self.all_main_stem_points_up[i], self.all_main_stem_points_down[i]))
+            if len(m_stem) < 2 or len(self.all_leaf_points[i]) < 2:
+                continue
+            x_stem, y_stem, z_stem = perform_linear_regression(m_stem)
             x_leaf, y_leaf, z_leaf = perform_linear_regression(self.all_leaf_points[i])
-            stem_vector = np.array([x_stem[-1], y_stem[-1], z_stem[-1]]) - np.array([x_stem[0], y_stem[0], z_stem[0]])
-            leaf_vector = np.array([x_leaf[-1], y_leaf[-1], z_leaf[-1]]) - np.array([x_leaf[0], y_leaf[0], z_leaf[0]])
-            extended_stem_end = extend_vector(np.array([x_stem[0], y_stem[0], z_stem[0]]), stem_vector)
-            extended_leaf_end = extend_vector(np.array([x_leaf[0], y_leaf[0], z_leaf[0]]), leaf_vector)
-            branch_off_pos = np.array([x_stem[0], y_stem[0], z_stem[0]])
-            arc_points = create_arc_points(branch_off_pos, extended_stem_end, extended_leaf_end)
-            # Create geometries (points, lines, arcs)
-            # Main stem
-            pcd_main_stem = o3d.geometry.PointCloud()
-            pcd_main_stem.points = o3d.utility.Vector3dVector(main_stem_combined)
-            pcd_main_stem.paint_uniform_color([1, 0, 0])
-            geometries.append(pcd_main_stem)
-            # Leaf
+
+            stem_vec = np.array([x_stem[-1], y_stem[-1], z_stem[-1]]) - np.array([x_stem[0], y_stem[0], z_stem[0]])
+            leaf_vec = np.array([x_leaf[-1], y_leaf[-1], z_leaf[-1]]) - np.array([x_leaf[0], y_leaf[0], z_leaf[0]])
+            branch_off_pt = np.array([x_stem[0], y_stem[0], z_stem[0]])
+            ext_stem = extend_vector(branch_off_pt, stem_vec)
+            ext_leaf = extend_vector(branch_off_pt, leaf_vec)
+            arc_pts = create_arc_points(branch_off_pt, ext_stem, ext_leaf)
+
+            # create geometry
+            pcd_stem = o3d.geometry.PointCloud()
+            pcd_stem.points = o3d.utility.Vector3dVector(m_stem)
+            pcd_stem.paint_uniform_color([1,0,0])
+            geometries.append(pcd_stem)
+
             pcd_leaf = o3d.geometry.PointCloud()
             pcd_leaf.points = o3d.utility.Vector3dVector(self.all_leaf_points[i])
-            pcd_leaf.paint_uniform_color([0, 1, 0])
+            pcd_leaf.paint_uniform_color([0,1,0])
             geometries.append(pcd_leaf)
-            # Lines
-            points = np.vstack([
-                [x_stem[0], y_stem[0], z_stem[0]], extended_stem_end,
-                [x_leaf[0], y_leaf[0], z_leaf[0]], extended_leaf_end
+
+            # lines
+            arr_points = np.vstack([
+                [x_stem[0], y_stem[0], z_stem[0]], ext_stem,
+                [x_leaf[0], y_leaf[0], z_leaf[0]], ext_leaf
             ])
-            lines = [[0, 1], [2, 3]]
-            line_set = o3d.geometry.LineSet()
-            line_set.points = o3d.utility.Vector3dVector(points)
-            line_set.lines = o3d.utility.Vector2iVector(lines)
-            line_set.colors = o3d.utility.Vector3dVector([[0, 0, 1], [0, 0, 1]])
-            geometries.append(line_set)
-            # Arc
-            arc_line_set = o3d.geometry.LineSet()
-            arc_line_set.points = o3d.utility.Vector3dVector(arc_points)
-            arc_lines = [[j, j + 1] for j in range(len(arc_points) - 1)]
-            arc_line_set.lines = o3d.utility.Vector2iVector(arc_lines)
-            arc_line_set.colors = o3d.utility.Vector3dVector([[1, 0, 1] for _ in arc_lines])
-            geometries.append(arc_line_set)
-            # Angle text can be added here if Open3D supports text rendering
-        # Visualize
+            lines_idx = [[0,1],[2,3]]
+            ls = o3d.geometry.LineSet()
+            ls.points = o3d.utility.Vector3dVector(arr_points)
+            ls.lines = o3d.utility.Vector2iVector(lines_idx)
+            ls.colors = o3d.utility.Vector3dVector([[0,0,1],[0,0,1]])
+            geometries.append(ls)
+
+            # arc
+            arc_ls = o3d.geometry.LineSet()
+            arc_ls.points = o3d.utility.Vector3dVector(arc_pts)
+            arc_lines = [[kk, kk+1] for kk in range(len(arc_pts)-1)]
+            arc_ls.lines = o3d.utility.Vector2iVector(arc_lines)
+            arc_ls.colors = o3d.utility.Vector3dVector([[1,0,1] for _ in arc_lines])
+            geometries.append(arc_ls)
+
         if geometries:
-            o3d.visualization.draw_geometries(geometries)
+            o3d.visualization.draw_geometries(geometries, window_name="Leaf Angles (Partial)")
         else:
-            print("No geometries to visualize.")
+            logger.info("No partial geometry to visualize (no leaf angles?).")
+
+    def visualize_in_original(self):
+        """
+        Combine arcs & lines with the entire original point cloud, so you see
+        arcs + the full geometry in one scene.
+        """
+        logger.info("LeafAngleAnalyzer: visualize_in_original() - full geometry.")
+        # Copy the original point cloud
+        full_geo = [self.point_cloud]
+        # Reuse logic from visualize_results but store line sets, arcs, etc.
+        for i in range(len(self.all_main_stem_points_up)):
+            m_stem = np.vstack((self.all_main_stem_points_up[i], self.all_main_stem_points_down[i]))
+            if len(m_stem) < 2 or len(self.all_leaf_points[i]) < 2:
+                continue
+            x_stem, y_stem, z_stem = perform_linear_regression(m_stem)
+            x_leaf, y_leaf, z_leaf = perform_linear_regression(self.all_leaf_points[i])
+
+            stem_vec = np.array([x_stem[-1], y_stem[-1], z_stem[-1]]) - np.array([x_stem[0], y_stem[0], z_stem[0]])
+            leaf_vec = np.array([x_leaf[-1], y_leaf[-1], z_leaf[-1]]) - np.array([x_leaf[0], y_leaf[0], z_leaf[0]])
+            branch_off_pt = np.array([x_stem[0], y_stem[0], z_stem[0]])
+            ext_stem = extend_vector(branch_off_pt, stem_vec)
+            ext_leaf = extend_vector(branch_off_pt, leaf_vec)
+            arc_pts = create_arc_points(branch_off_pt, ext_stem, ext_leaf)
+
+            # lines
+            arr_points = np.vstack([
+                [x_stem[0], y_stem[0], z_stem[0]], ext_stem,
+                [x_leaf[0], y_leaf[0], z_leaf[0]], ext_leaf
+            ])
+            lines_idx = [[0,1],[2,3]]
+            ls = o3d.geometry.LineSet()
+            ls.points = o3d.utility.Vector3dVector(arr_points)
+            ls.lines = o3d.utility.Vector2iVector(lines_idx)
+            ls.colors = o3d.utility.Vector3dVector([[0,0,1],[0,0,1]])
+            full_geo.append(ls)
+
+            # arc
+            arc_ls = o3d.geometry.LineSet()
+            arc_ls.points = o3d.utility.Vector3dVector(arc_pts)
+            arc_lines = [[kk, kk+1] for kk in range(len(arc_pts)-1)]
+            arc_ls.lines = o3d.utility.Vector2iVector(arc_lines)
+            arc_ls.colors = o3d.utility.Vector3dVector([[1,0,1] for _ in arc_lines])
+            full_geo.append(arc_ls)
+
+        if len(full_geo) > 1:
+            o3d.visualization.draw_geometries(full_geo, window_name="Leaf Angles in Original Cloud")
+        else:
+            logger.info("No arcs to visualize with original.")
 
     # Helper methods
     def _split_points_into_sections(self, points, n_sections):
