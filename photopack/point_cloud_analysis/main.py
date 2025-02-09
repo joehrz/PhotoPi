@@ -11,6 +11,7 @@ import csv
 import json
 import math
 
+
 logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
 logger = logging.getLogger(__name__)
 
@@ -241,7 +242,10 @@ def compute_metrics(point_cloud, modules_to_run, seg_mode, scale, ring_diameter,
 
         segmentation.label_branch_off_nodes(min_degree=3)
         segmentation.visualize_graph_with_types()
-        segmentation.extract_sections(n_main_stem=5, n_leaf=5)
+        labeled_pcd = segmentation.map_labels_to_original_points()
+        if labeled_pcd is not None:
+            o3d.visualization.draw_geometries([labeled_pcd], window_name="Labeled Point Cloud")
+        #segmentation.extract_sections(n_main_stem=5, n_leaf=5)
 
         if 'leaf_angles' in modules_to_run:
             from photopack.point_cloud_analysis.point_cloud.leaf_angles import LeafAngleAnalyzer
@@ -311,6 +315,7 @@ def main():
                         default='auto', help='How to run segmentation.')
     parser.add_argument('--json-config', default='metrics_config.json', help='Path to JSON with base headers.')
     parser.add_argument('--csv-out', default='analysis_metrics.csv', help='Output CSV file.')
+    parser.add_argument('--use_mysql', default=None, help='Output SQL file.')
     args = parser.parse_args()
 
     input_path = args.path
@@ -357,8 +362,29 @@ def main():
     # 4) Process each .ply
     for ply_file in ply_files:
         row_data = process_single_file(ply_file, modules_to_run, seg_mode, scale, ring_diameter, top_percentage)
-        # 5) Append to CSV
+        # Update CSV (overwriting if cultivar exists)
         append_to_csv(row_data)
+
+
+    # Optionally, insert/update MySQL if desired.
+    if args.use_mysql:  # Assume you add a --use-mysql flag
+        from photopack.point_cloud_analysis.utils.mysql_database import insert_metrics_to_mysql
+        db_config = {
+            "user": args.mysql_user,
+            "password": args.mysql_password,
+            "host": args.mysql_host,
+            "database": args.mysql_database
+        }
+        insert_metrics_to_mysql(row_data, db_config)
+
+
+
+
+
+
+
+
+
 
     logger.info("All processing completed.")
 
