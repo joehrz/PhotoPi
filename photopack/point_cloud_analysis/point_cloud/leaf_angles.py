@@ -2,14 +2,10 @@ import numpy as np
 import open3d as o3d
 import matplotlib.pyplot as plt
 import logging
-import networkx as nx
 import math
 
-from sklearn.linear_model import LinearRegression, RANSACRegressor
-from sklearn.decomposition import PCA
-from scipy.cluster.hierarchy import linkage, fcluster
-from scipy.interpolate import splprep, splev
-import hdbscan
+from sklearn.linear_model import LinearRegression
+
 
 # This import is necessary to indicate the expected type for the segmentation instance.
 from photopack.point_cloud_analysis.point_cloud.main_stem_segmentation import MainStemSegmentation
