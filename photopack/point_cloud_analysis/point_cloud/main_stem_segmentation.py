@@ -2,14 +2,12 @@ import numpy as np
 import open3d as o3d
 import logging
 import copy
-from scipy.ndimage import gaussian_filter1d
-import matplotlib.pyplot as plt
 import networkx as nx
 from sklearn.decomposition import PCA
 import math
 from sklearn.cluster import DBSCAN
 from sklearn.neighbors import NearestNeighbors
-from sklearn.linear_model import LinearRegression
+
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
@@ -235,25 +233,27 @@ class MainStemSegmentation:
     def aggregate_centroids(self):
         """
         For each continuous structure, compute the aggregated centroids.
-        These centroids become nodes in the final graph.
+        Also store a mapping from each aggregated centroid (graph node) to its corresponding
+        cluster in the sections_analysis.
         """
         logger.info("aggregate_centroids: Aggregating centroids from continuous structures.")
         aggregated_centroids = []
+        # New mapping: each entry is (section_index, cluster_index)
+        self.aggregated_centroids_mapping = []  
+
         for structure in self.continuous_structures:
-            ctds = self._aggregate_structure_centroids(self.sections_analysis, structure)
-            aggregated_centroids.append(ctds)
+            # structure is a list of tuples: (slice_index, cluster_index)
+            for (sec_idx, cluster_idx) in structure:
+                cluster = self.sections_analysis[sec_idx]['clusters'][cluster_idx]
+                aggregated_centroids.append(cluster['centroid'])
+                self.aggregated_centroids_mapping.append((sec_idx, cluster_idx))
 
-        all_pts = []
-        colors = []
-        for ctds in aggregated_centroids:
-            all_pts.extend(ctds)
-            # Assign a random color per structure (for visualization).
-            rand_c = np.random.rand(3)
-            colors.extend([rand_c] * len(ctds))
-
-        self.centroids_pcd.points = o3d.utility.Vector3dVector(np.array(all_pts))
+        # Create the point cloud of aggregated centroids
+        self.centroids_pcd.points = o3d.utility.Vector3dVector(np.array(aggregated_centroids))
+        # (Optional) assign a random color per centroid or per structure.
+        colors = [np.random.rand(3) for _ in aggregated_centroids]
         self.centroids_pcd.colors = o3d.utility.Vector3dVector(np.array(colors))
-        logger.info(f"Aggregated {len(all_pts)} centroids into centroids_pcd.")
+        logger.info(f"Aggregated {len(aggregated_centroids)} centroids into centroids_pcd.")
 
     def _aggregate_structure_centroids(self, sections_analysis, structure):
         ctds = []
@@ -503,25 +503,70 @@ class MainStemSegmentation:
 
 
 
-    def label_branch_off_nodes(self, min_degree=3):
+
+
+
+
+    def map_labels_to_original_points(self):
         """
-        Label nodes with degree >= min_degree as 'branch_off'.
-
-        Parameters:
-        min_degree (int): The minimum degree required for a node to be considered a branch-off.
+        Create a new point cloud where the original points from each cluster
+        are colored according to the label assigned to their corresponding aggregated centroid.
         """
-        logger.info(f"label_branch_off_nodes => labeling nodes with degree >= {min_degree} as 'branch_off'.")
-        self.branch_off_nodes.clear()
-        for n in self.graph.nodes():
-            deg = self.graph.degree(n)
-            if deg >= min_degree:
-                self.graph.nodes[n]['type'] = 'branch_off'
-        self.branch_off_nodes = [x for x in self.graph.nodes() if self.graph.nodes[x].get('type') == 'branch_off']
-        logger.info(f"Found {len(self.branch_off_nodes)} branch_off nodes (deg >= {min_degree}).")
+        # Define colors for each label type (customize as needed)
+        color_map = {
+            'stem': [1, 0, 0],         # red
+            'branch_off': [0, 0, 1],   # blue
+            'leaf': [0, 1, 0],         # green
+            'unknown': [0.5, 0.5, 0.5]  # gray
+        }
+
+        labeled_points = []
+        labeled_colors = []
+
+        # Make sure the mapping exists and that segmentation has been run
+        if not hasattr(self, "aggregated_centroids_mapping"):
+            logger.error("Mapping of aggregated centroids to original clusters not found!")
+            return None
+
+        # Iterate over each graph node (aggregated centroid)
+        for node_idx, (sec_idx, cluster_idx) in enumerate(self.aggregated_centroids_mapping):
+            # Retrieve the label from the graph node; default to 'unknown' if not set.
+            node_label = self.graph.nodes[node_idx].get('type', 'unknown')
+            # Retrieve the original cluster’s points (from the corresponding slice)
+            cluster_data = self.sections_analysis[sec_idx]['clusters'][cluster_idx]
+            pts = cluster_data['points']
+            # Use the color corresponding to the node’s label
+            col = color_map.get(node_label, [0.5, 0.5, 0.5])
+            # Append each point with its color
+            for pt in pts:
+                labeled_points.append(pt)
+                labeled_colors.append(col)
+
+        # Create a new point cloud with the labeled points
+        labeled_pcd = o3d.geometry.PointCloud()
+        labeled_pcd.points = o3d.utility.Vector3dVector(np.array(labeled_points))
+        labeled_pcd.colors = o3d.utility.Vector3dVector(np.array(labeled_colors))
+        logger.info("Mapped segmentation labels back to the original point cloud.")
+        
+        return labeled_pcd
 
 
 
-    
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -557,7 +602,7 @@ class MainStemSegmentation:
         logger.info("visualize_graph_with_types => color-coded centroid graph.")
         geoms = []
         if show_original:
-            geoms.append(self.point_cloud)
+            geoms.append(self.pcd)
 
         pos = []
         type_colors = []
