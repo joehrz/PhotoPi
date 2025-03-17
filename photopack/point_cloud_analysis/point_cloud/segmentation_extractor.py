@@ -21,10 +21,10 @@ class Segmentation:
     """
     Segmentation: A class for semi-automatic segmentation and cluster refinement of 3D point clouds.
 
-    This class implements a complete workflow to segment a full-resolution point cloud (e.g., a plant
-    point cloud) into distinct clusters using a combination of downsampling, graph-based segmentation,
-    MST-based refinement, and cluster filtering. The resulting segmentation can be used for further 
-    analysis, such as morphological measurements or manual refinement.
+    This class implements a complete workflow to segment a full-resolution point cloud into distinct 
+    clusters using a combination of downsampling, graph-based segmentation, MST-based refinement, and 
+    cluster filtering. The resulting segmentation can be used for further analysis, such as morphological 
+    measurements or manual refinement.
 
     The workflow comprises the following major steps:
 
@@ -561,6 +561,7 @@ class Segmentation:
         unique_sorted = sorted(unique_lbls)
         for i, u in enumerate(unique_sorted):
             color_lookup[u] = cmap(i / max(1, len(unique_sorted)))[:3]
+        print(color_lookup)
         color_list = []
         for l in lbls:
             if l == -1:
