@@ -171,17 +171,29 @@ def compute_metrics(point_cloud, modules_to_run, seg_mode, scale, ring_diameter,
     if 'hr_analysis' in modules_to_run:
         from photopack.point_cloud_analysis.point_cloud.hr_analysis import HRAnalyzer
         hr = HRAnalyzer(point_cloud, scale)
-        hr.analyze_hr()
+        
+        # Instead of hr.run_full_pipeline(...):
+        hr.analyze_hr_with_mainstem(
+            alpha=1.0,
+            beta=2.0,
+            raindrop_alpha=1.0,
+            raindrop_beta=1.0,
+            use_trunk_axis=True,
+            debug=True
+        )
 
-        row_data["H_Max"] = hr.height_density
+        hr.visualize_with_open3d()
+        hr.plot_radius_vs_theta()
+
+        # Log and store the metrics
+        row_data["H_Max"] = hr.height
         row_data["R_Max"] = hr.max_radius
         if hr.max_radius:
-            row_data["H_over_R"] = hr.height_density / hr.max_radius
+            row_data["H_over_R"] = hr.height / hr.max_radius
         else:
-            row_data["H_over_R"] = ""
-
-        logger.info(f"[hr_analysis] H_Max={hr.height_density:.2f}, R_Max={hr.max_radius:.2f}, H_over_R={row_data['H_over_R']}")
-
+           row_data["H_over_R"] = ""
+    
+        #logger.info(f"[hr_analysis] H_Max={hr.height_density:.2f}, R_Max={hr.max_radius:.2f}, H_over_R={row_data['H_over_R']}")
 
 
     # 5) PROJECTION
@@ -200,6 +212,7 @@ def compute_metrics(point_cloud, modules_to_run, seg_mode, scale, ring_diameter,
         seg = Segmentation(point_cloud, min_cluster_size=50)
 
         if seg_mode in ['auto','both']:
+            seg.visualize_downsampled()
             seg.preprocess(voxel_size=0.005, nb_neighbors=20, std_ratio=2.0)
             seg.graph_based_segmentation(k=50, z_scale=1.0, distance_threshold=0.009)
             seg.refine_with_mst_segmentation(num_cuts=2)
@@ -207,6 +220,7 @@ def compute_metrics(point_cloud, modules_to_run, seg_mode, scale, ring_diameter,
             seg.map_labels_to_original()
             seg.segment_and_store()
             logger.info("[segmentation] Auto-segmentation complete.")
+            seg.visualize_segments_original()  # color-coded original point cloud
 
         if seg_mode in ['manual','both']:
             logger.info("[segmentation] Manual steps not fully shown here.")
@@ -216,53 +230,64 @@ def compute_metrics(point_cloud, modules_to_run, seg_mode, scale, ring_diameter,
     if 'mainstem_segmentation' in modules_to_run:
         from photopack.point_cloud_analysis.point_cloud.main_stem_segmentation import MainStemSegmentation
 
-        # Initialize the segmentation class.
+
+        # 1) Initialize the segmentation class with the point cloud.
         segmentation = MainStemSegmentation(point_cloud)
-        # Run initial processing steps
-        segmentation.process_point_cloud(eps=0.006, min_samples=50, n_sections=80)
-        segmentation.aggregate_centroids()
-        segmentation.build_graph(k=2)
-        segmentation.remove_cycles()
-        segmentation.visualize_graph_with_types()
 
-        segmentation.segment_nodes()
+        # 2) Run the entire pipeline in one shot:
+        segmentation.run_full_pipeline(
+            alpha=1.0,
+            beta=0.5,
+            raindrop_alpha=0.5,
+            raindrop_beta=3.0,
+            gamma=2.0,
+            delta=30.0,
+            use_trunk_axis=True,
+            debug=True
+        )
 
-        
-        segmentation.visualize_graph_with_types()
-        segmentation.bridge_graph_gap(max_gap=0.1)
-        # Use the custom graph traversal to extract the main stem.
-        main_stem_path = segmentation.traverse_main_stem(alpha=1.0, theta_threshold=math.pi/8)
-    
-        # Visualize the resulting main stem centerline.
-        segmentation.visualize_centerline()
-        segmentation.reclassify_nodes_by_centerline(distance_threshold=0.005)
-        segmentation.visualize_graph_with_types()
+        segmentation.visualize_final_graph_types()
+        logger.info("[mainstem_segmentation] Pipeline complete => trunk path extracted, labeled PCD available.")
 
+        # The pipeline produces trunk_path, labeled_pcd, branch_off_nodes, etc.
+        # If you want to visualize the final labeled point cloud:
+        if segmentation.labeled_pcd is not None:
+            o3d.visualization.draw_geometries(
+                [segmentation.labeled_pcd],
+                window_name="MainStemSegmentation - Labeled PCD"
+            )
 
-
-        segmentation.label_branch_off_nodes(min_degree=3)
-        segmentation.visualize_graph_with_types()
-        labeled_pcd = segmentation.map_labels_to_original_points()
-        if labeled_pcd is not None:
-            o3d.visualization.draw_geometries([labeled_pcd], window_name="Labeled Point Cloud")
-        #segmentation.extract_sections(n_main_stem=5, n_leaf=5)
-
+        # 3) If user also wants leaf angles => we run LeafAngleAnalyzer:
         if 'leaf_angles' in modules_to_run:
             from photopack.point_cloud_analysis.point_cloud.leaf_angles import LeafAngleAnalyzer
             la = LeafAngleAnalyzer(segmentation)
-            angles = la.compute_leaf_angles()
-            logger.info(f"[leaf_angles] Computed leaf angles: {angles}")
-            la.compute_leaf_angles()
-            la.visualize_results()
-            la.visualize_in_original()
- 
-        
-       
-        
+            la.compute_leaf_angles_node_bfs(
+                n_main_stem=5,
+                n_leaf=5,
+                flip_if_obtuse=True,
+                min_leaf_for_angle=4,
+                max_bfs_depth=5
+                )
+            la.visualize_leaf_angles()
+            
+            
+            
+            
+            
+  
+            logger.info(f"[leaf_angles] Computed leaf angles => {la.angles}")
+
+            # Store the main/top leaf angle (if any)
+            row_data["Main_leaf_angle"] = la.main_leaf_angle if la.main_leaf_angle is not None else ""
+            # Count how many angles are valid (non-None)
+            valid_angles = [ang for ang in la.angles if ang is not None]
+            row_data["Leaf_angle_count"] = len(valid_angles)
+            for i in range(len(valid_angles)):
+                 row_data[f"Leaf_angle_{i}"] = valid_angles[i]
 
 
-        # Visualize the local regression results based on the anchor method.    
-        #segmentation.visualize_results_anchor(num_main=5, num_leaf=5)
+
+
 
     # Compute volume ratios or other derived metrics
     def safe_div(a, b):
@@ -376,12 +401,6 @@ def main():
             "database": args.mysql_database
         }
         insert_metrics_to_mysql(row_data, db_config)
-
-
-
-
-
-
 
 
 

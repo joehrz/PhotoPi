@@ -1,317 +1,481 @@
 import numpy as np
+from collections import deque
 import open3d as o3d
-import matplotlib.pyplot as plt
-import logging
-import math
-
 from sklearn.linear_model import LinearRegression
 
 
-# This import is necessary to indicate the expected type for the segmentation instance.
-from photopack.point_cloud_analysis.point_cloud.main_stem_segmentation import MainStemSegmentation
-
-logger = logging.getLogger(__name__)
-
-
-# --- Utility Functions ---
-def perform_linear_regression(points):
-    """
-    Perform linear regression on a set of 3D points.
-    Here, the z-coordinate is used as the independent variable and x,y are predicted.
-    Returns predicted x, y, and uniformly spaced z values.
-    """
-    if len(points) < 2:
-        return points[:, 0], points[:, 1], points[:, 2]
-
-    X = points[:, 2].reshape(-1, 1)
-    reg_x = LinearRegression().fit(X, points[:, 0])
-    reg_y = LinearRegression().fit(X, points[:, 1])
-    z_vals = np.linspace(np.min(X), np.max(X), 100).reshape(-1, 1)
-    x_vals = reg_x.predict(z_vals)
-    y_vals = reg_y.predict(z_vals)
-    return x_vals, y_vals, z_vals.flatten()
-
-
-def calculate_angle_between_vectors(v1, v2):
-    """
-    Calculate and return the angle in degrees between two 3D vectors.
-    """
-    dot = np.dot(v1, v2)
-    mag1 = np.linalg.norm(v1)
-    mag2 = np.linalg.norm(v2)
-    if mag1 == 0 or mag2 == 0:
-        return None
-    cos = np.clip(dot / (mag1 * mag2), -1, 1)
-    return math.degrees(np.arccos(cos))
-
-
-def extend_vector(start_point, direction_vector, scale=1.5):
-    """
-    Extend a vector from a starting point by a given scale.
-    """
-    return start_point + scale * direction_vector
-
-
-def create_arc_points(center, start_point, end_point, num_points=20):
-    """
-    Create a set of points forming an arc from start_point to end_point around the center.
-    """
-    v1 = start_point - center
-    v2 = end_point - center
-    norm1, norm2 = np.linalg.norm(v1), np.linalg.norm(v2)
-    if norm1 < 1e-9 or norm2 < 1e-9:
-        return np.vstack((center, start_point, end_point))
-
-    v1n, v2n = v1 / norm1, v2 / norm2
-    dot = np.clip(np.dot(v1n, v2n), -1, 1)
-    angle = np.arccos(dot)
-    arc_points = []
-    axis = np.cross(v1n, v2n)
-    axis_len = np.linalg.norm(axis)
-    if axis_len < 1e-9:
-        return np.vstack((center, start_point, end_point))
-    axis /= axis_len
-
-    for t in np.linspace(0, 1, num_points):
-        theta = t * angle
-        K = np.array([
-            [0, -axis[2], axis[1]],
-            [axis[2], 0, -axis[0]],
-            [-axis[1], axis[0], 0]
-        ])
-        R = np.eye(3)*np.cos(theta) + np.sin(theta)*K + (1 - np.cos(theta)) * np.outer(axis, axis)
-        arc_points.append(center + R @ v1)
-    return np.array(arc_points)
-
-
-# --- Main Leaf Angle Analyzer Class ---
 class LeafAngleAnalyzer:
     """
     LeafAngleAnalyzer computes leaf angles from segmented plant point cloud data.
-    
-    This class is designed to work with an instance of MainStemSegmentation that has already 
-    processed the point cloud. It expects that the segmentation instance contains the following:
-      - all_main_stem_points_up: List of 3D point arrays (upward main stem points per branch)
-      - all_main_stem_points_down: List of 3D point arrays (downward main stem points per branch)
-      - all_leaf_points: List of 3D point arrays for each branch (leaf regions)
-    
-    The leaf angle is computed by fitting linear regression models (using z as the independent variable)
-    to both the main stem points and the leaf points in each branch region. The angle between the 
-    resulting direction vectors is then calculated.
+
+    It expects that the segmentation instance (from MainStemSegmentation) 
+    has already identified branch 'stem' vs. 'leaf' points for each branch, 
+    typically stored as:
+      - all_main_stem_points_up[i]: Nx3 array (the 'up' portion of the main stem)
+      - all_main_stem_points_down[i]: Nx3 array (the 'down' portion of the main stem)
+      - all_leaf_points[i]: Nx3 array of leaf region points
+
+    This class can then:
+      - Compute leaf angles by performing a linear regression on (z vs. x,y) 
+        for the main stem and the leaf.
+      - Visualize these angles in Open3D by drawing arcs and lines.
+
+    Attributes
+    ----------
+    segmentation : MainStemSegmentation (or similar)
+        An instance that holds references to 'all_main_stem_points_up', 
+        'all_main_stem_points_down', and 'all_leaf_points'.
+    angles : list of float or None
+        Computed leaf angles (in degrees) for each branch. If a branch 
+        does not meet the minimum data requirement, its angle is None.
+    main_leaf_angle : float or None
+        An optional metric for the "main leaf angle" (e.g., topmost leaf).
+    main_leaf_branch_index : int or None
+        Which branch index had the "main leaf angle".
     """
-    def __init__(self, segmentation: MainStemSegmentation):
+
+    def __init__(self, segmentation):
         """
-        Initialize the LeafAngleAnalyzer.
-        
-        Parameters:
-            segmentation (MainStemSegmentation): A fully processed segmentation instance containing
-                                                  the necessary segmented point sets.
+        Initialize with a segmentation object that has 
+        main-stem and leaf points for each branch region.
+
+        Parameters
+        ----------
+        segmentation : object
+            Should contain:
+              segmentation.all_main_stem_points_up
+              segmentation.all_main_stem_points_down
+              segmentation.all_leaf_points
+            each a list of Nx3 arrays.
         """
         self.segmentation = segmentation
-        self.angles = []  # List to store computed leaf angles (in degrees)
+        self.angles = []  # Computed leaf angles per branch
+        self.main_leaf_angle = None
+        self.main_leaf_branch_index = None
 
-    def compute_leaf_angles(self):
-        """
-        Compute leaf angles for each branch region.
-        
-        For each branch (i.e. for each set of extracted main stem and leaf points),
-        the method performs the following:
-          - Combines the upward and downward main stem points into one array.
-          - Fits linear regression models to the main stem points and leaf points (using z as the independent variable).
-          - Derives direction vectors from the endpoints of the regression lines.
-          - Calculates the angle (in degrees) between the two direction vectors.
-        
-        Returns:
-            list: A list of computed leaf angles. For branch regions with insufficient points, None is appended.
-        """
-        for i in range(len(self.segmentation.all_main_stem_points_up)):
-            # Combine up and down main stem points for the branch
-            stem_pts = np.vstack((self.segmentation.all_main_stem_points_up[i],
-                                  self.segmentation.all_main_stem_points_down[i]))
-            leaf_pts = self.segmentation.all_leaf_points[i]
 
-            # Check if there are enough points for regression
-            if len(stem_pts) < 2 or len(leaf_pts) < 2:
-                logger.warning(f"Branch {i+1} => not enough points for regression. Skipping.")
-                self.angles.append(None)
+
+    def compute_leaf_angles_node_bfs(
+        self,
+        n_main_stem=5,
+        n_leaf=5,
+        flip_if_obtuse=True,
+        min_leaf_for_angle=4,
+        max_bfs_depth=5
+    ):
+        """
+        Replicate the BFS approach from your segmentation code:
+         - For each branch_off node in the trunk, gather 'stem_points' around it
+         - Collect connected 'leaf_points' by BFS
+         - Fit lines (SVD in 3D) and compute the angle
+
+        Parameters
+        ----------
+        n_main_stem : int
+            How many trunk nodes above/below the branch_off node we gather.
+        n_leaf : int
+            Max leaf nodes to collect by BFS.
+        flip_if_obtuse : bool
+            If True, angles >90 deg => use (180 - angle).
+        min_leaf_for_angle : int
+            If BFS finds fewer leaf nodes => skip angle.
+        max_bfs_depth : int
+            BFS limit for counting leaves if you want to ensure enough leaf points.
+
+        Returns
+        -------
+        self.branch_data : list of dict
+            Each dict = {
+               'branch_off'  : node_id,
+               'stem_points' : Nx3,
+               'leaf_points' : Mx3,
+               'angle_degrees' : float
+            }
+        """
+        G         = self.segmentation.G_neg_final
+        cpoints   = self.segmentation.cpoints_final
+        trunk_ids = self.segmentation.trunk_path
+        b_offs    = self.segmentation.branch_off_nodes
+
+        if G is None or cpoints is None or not trunk_ids:
+            print("[ERROR] Segmentation data missing or invalid.")
+            return []
+
+        # We'll define some BFS helpers
+        def undirected_neighbors(u):
+            return set(G.successors(u)) | set(G.predecessors(u))
+
+        def count_leaf_nodes_bfs(start, depth_limit):
+            visited = set()
+            queue   = deque([(start,0)])
+            leaf_cnt= 0
+            while queue:
+                nd, dpt = queue.popleft()
+                if nd in visited:
+                    continue
+                visited.add(nd)
+                if G.nodes[nd].get('type')=='leaf':
+                    leaf_cnt += 1
+                if dpt< depth_limit:
+                    for nb in undirected_neighbors(nd):
+                        if nb not in visited:
+                            queue.append((nb, dpt+1))
+            return leaf_cnt
+
+        def collect_leaf_nodes_bfs(start, n_leaf):
+            visited = set()
+            queue   = deque()
+            leaves  = []
+            # Start from immediate neighbors that are 'leaf'
+            for nb in undirected_neighbors(start):
+                if G.nodes[nb].get('type')=='leaf':
+                    queue.append(nb)
+
+            while queue and len(leaves)< n_leaf:
+                curr = queue.popleft()
+                if curr in visited:
+                    continue
+                visited.add(curr)
+                if G.nodes[curr].get('type')=='leaf':
+                    leaves.append(curr)
+                    # expand further leaf neighbors
+                    for nxt in undirected_neighbors(curr):
+                        if nxt not in visited and G.nodes[nxt].get('type')=='leaf':
+                            queue.append(nxt)
+            return leaves
+
+        def fit_line_svd(pts):
+            """
+            SVD-based line fit in 3D. Returns (center, direction).
+            """
+            arr = np.asarray(pts)
+            if arr.shape[0]<2:
+                return (None,None)
+            center = arr.mean(axis=0)
+            uu, ss, vh = np.linalg.svd(arr - center)
+            direction  = vh[0] / np.linalg.norm(vh[0])
+            return (center, direction)
+
+        self.branch_data = []
+        trunk_set = set(trunk_ids)
+
+        for b_off in b_offs:
+            # Ensure the branch_off node is actually on trunk
+            if b_off not in trunk_set:
+                print(f"[WARN] skip b_off= {b_off}, not on trunk_path.")
                 continue
 
-            x_st, y_st, z_st = perform_linear_regression(stem_pts)
-            x_lf, y_lf, z_lf = perform_linear_regression(leaf_pts)
+            # Count leaf nodes within BFS => skip if not enough
+            leaf_count = count_leaf_nodes_bfs(b_off, max_bfs_depth)
+            if leaf_count < min_leaf_for_angle:
+                print(f"[SKIP] branch_off= {b_off}: only {leaf_count} leaves => skip angle.")
+                continue
 
-            # Compute direction vectors from the regression endpoints
-            stem_vec = np.array([x_st[-1], y_st[-1], z_st[-1]]) - np.array([x_st[0], y_st[0], z_st[0]])
-            leaf_vec = np.array([x_lf[-1], y_lf[-1], z_lf[-1]]) - np.array([x_lf[0], y_lf[0], z_lf[0]])
+            # Collect trunk nodes: n_main_stem above + below
+            idx      = trunk_ids.index(b_off)
+            aboveIDs = trunk_ids[idx+1 : idx+1+n_main_stem]
+            belowIDs = trunk_ids[max(0, idx-n_main_stem) : idx]
+            trunk_nodes  = aboveIDs + belowIDs
+            trunk_points = []
+            for tn in trunk_nodes:
+                if tn < len(cpoints):
+                    trunk_points.append(cpoints[tn])
+            # if we don't have at least 2 points => skip
+            if len(trunk_points) < 2:
+                continue
 
-            angle_deg = calculate_angle_between_vectors(stem_vec, leaf_vec)
-            self.angles.append(angle_deg)
-            logger.info(f"Branch-off {i+1} => Leaf angle = {angle_deg:.2f} deg")
-        return self.angles
+            # Collect leaf nodes => BFS
+            leaf_nodes = collect_leaf_nodes_bfs(b_off, n_leaf)
+            leaf_points= []
+            for ln in leaf_nodes:
+                if ln < len(cpoints):
+                    leaf_points.append(cpoints[ln])
+            if len(leaf_points) < 2:
+                continue
 
-    # ------------------- Visualization Methods ------------------- #
-    def visualize_results(self):
+            # Fit lines
+            stem_center, stem_dir = fit_line_svd(trunk_points)
+            leaf_center, leaf_dir = fit_line_svd(leaf_points)
+            if stem_dir is None or leaf_dir is None:
+                continue
+
+            # Compute angle
+            dot_val = np.clip(np.dot(stem_dir, leaf_dir), -1.0, 1.0)
+            angle_deg = np.degrees(np.arccos(dot_val))
+            if flip_if_obtuse and angle_deg>90:
+                angle_deg = 180 - angle_deg
+
+            self.branch_data.append({
+                'branch_off':   b_off,
+                'stem_points':  np.array(trunk_points),
+                'leaf_points':  np.array(leaf_points),
+                'angle_degrees': angle_deg
+            })
+            print(f"[NODE-BFS ANGLE] b_off= {b_off}, angle= {angle_deg:.2f}")
+
+        # Pull out angles alone
+        self.angles = [bd['angle_degrees'] for bd in self.branch_data]
+
+        # Optionally pick a "main_leaf_angle" if you want the largest or something
+        best_idx, best_val = None, None
+        for i, bd in enumerate(self.branch_data):
+            ang = bd['angle_degrees']
+            if best_val is None or (ang is not None and ang> best_val):
+                best_val = ang
+                best_idx= i
+        self.main_leaf_angle = best_val
+        self.main_leaf_branch_index = best_idx
+
+        return self.branch_data
+
+    # -----------------------------------------------------
+    # (Optional) If you want to visualize BFS-based angles
+    # in Open3D, you can add a method similar to the old code
+    # but now you have the BFS-based trunk_points/leaf_points
+    # in self.branch_data. For example:
+    # -----------------------------------------------------
+
+    def visualize_bfs_leaf_angles_open3d(self):
         """
-        Visualize local geometry for each branch region by displaying:
-          - Main stem points in red.
-          - Leaf points in green.
-          - Lines from the branch point (start of regression) to the extended regression endpoints.
-          - An arc representing the computed angle.
-          - The leaf regression line (in green).
+        Example visualization that draws:
+         - trunk_points in red
+         - leaf_points in green
+         - a line for trunk, a line for leaf
+         - an arc representing the angle
+
+        BFS-based approach: we pull data from self.branch_data, where
+        trunk_points & leaf_points were found by BFS.
         """
-        logger.info("visualize_results => Displaying partial geometry (stem/leaf arcs).")
+
+        import open3d as o3d
+
         geoms = []
-        for i in range(len(self.segmentation.all_main_stem_points_up)):
-            stem_pts = np.vstack((self.segmentation.all_main_stem_points_up[i],
-                                  self.segmentation.all_main_stem_points_down[i]))
-            leaf_pts = self.segmentation.all_leaf_points[i]
-            if len(stem_pts) < 2 or len(leaf_pts) < 2:
-                continue
+        for i, bd in enumerate(self.branch_data):
+            trunk_pts = bd['stem_points']
+            leaf_pts  = bd['leaf_points']
+            angle_deg = bd['angle_degrees']
 
-            x_stem, y_stem, z_stem = perform_linear_regression(stem_pts)
-            x_leaf, y_leaf, z_leaf = perform_linear_regression(leaf_pts)
+            # Build small point clouds
+            trunk_pcd = o3d.geometry.PointCloud()
+            trunk_pcd.points = o3d.utility.Vector3dVector(trunk_pts)
+            trunk_pcd.paint_uniform_color([1,0,0])  # red
+            geoms.append(trunk_pcd)
 
-            stem_vec = np.array([x_stem[-1], y_stem[-1], z_stem[-1]]) - np.array([x_stem[0], y_stem[0], z_stem[0]])
-            leaf_vec = np.array([x_leaf[-1], y_leaf[-1], z_leaf[-1]]) - np.array([x_leaf[0], y_leaf[0], z_leaf[0]])
+            leaf_pcd  = o3d.geometry.PointCloud()
+            leaf_pcd.points = o3d.utility.Vector3dVector(leaf_pts)
+            leaf_pcd.paint_uniform_color([0,1,0])  # green
+            geoms.append(leaf_pcd)
 
-            branch_pt = np.array([x_stem[0], y_stem[0], z_stem[0]])
-            ext_stem = extend_vector(branch_pt, stem_vec)
-            ext_leaf = extend_vector(branch_pt, leaf_vec)
-            arc_pts = create_arc_points(branch_pt, ext_stem, ext_leaf)
+            # Lines for trunk, leaf (just 2 endpoints if you want)
+            # Or do an SVD-based line for each
+            # We'll do a minimal approach => just from minZ to maxZ
+            # or re-use the 'fit_line_svd' function.
+            # ...
+            # For brevity, we won't show the entire line or arc code here:
+            print(f"Branch {i} => angle= {angle_deg:.2f} deg")
 
-            # Create and color the point clouds
-            pcd_stem = o3d.geometry.PointCloud()
-            pcd_stem.points = o3d.utility.Vector3dVector(stem_pts)
-            pcd_stem.paint_uniform_color([1, 0, 0])
-            geoms.append(pcd_stem)
-
-            pcd_leaf = o3d.geometry.PointCloud()
-            pcd_leaf.points = o3d.utility.Vector3dVector(leaf_pts)
-            pcd_leaf.paint_uniform_color([0, 1, 0])
-            geoms.append(pcd_leaf)
-
-            # Draw lines from branch_pt to the extended endpoints
-            arr_pts = np.vstack([
-                branch_pt, ext_stem,
-                np.array([x_leaf[0], y_leaf[0], z_leaf[0]]), ext_leaf
-            ])
-            lines_idx = [[0, 1], [2, 3]]
-            ls = o3d.geometry.LineSet()
-            ls.points = o3d.utility.Vector3dVector(arr_pts)
-            ls.lines = o3d.utility.Vector2iVector(lines_idx)
-            ls.colors = o3d.utility.Vector3dVector([[0, 0, 1], [0, 0, 1]])
-            geoms.append(ls)
-
-            # Draw arc (in pink) representing the angle
-            arc_ls = o3d.geometry.LineSet()
-            arc_ls.points = o3d.utility.Vector3dVector(arc_pts)
-            arc_lines = [[kk, kk+1] for kk in range(len(arc_pts)-1)]
-            arc_ls.lines = o3d.utility.Vector2iVector(arc_lines)
-            arc_ls.colors = o3d.utility.Vector3dVector([[1, 0, 1] for _ in arc_lines])
-            geoms.append(arc_ls)
-
-            # Draw the leaf regression line (in green)
-            leaf_reg_pts = np.column_stack((x_leaf, y_leaf, z_leaf))
-            leaf_reg_lines = [[kk, kk+1] for kk in range(len(leaf_reg_pts)-1)]
-            leaf_reg_ls = o3d.geometry.LineSet()
-            leaf_reg_ls.points = o3d.utility.Vector3dVector(leaf_reg_pts)
-            leaf_reg_ls.lines = o3d.utility.Vector2iVector(leaf_reg_lines)
-            leaf_reg_ls.colors = o3d.utility.Vector3dVector([[0, 1, 0] for _ in leaf_reg_lines])
-            geoms.append(leaf_reg_ls)
-
+        # show them
         if geoms:
-            o3d.visualization.draw_geometries(geoms, window_name="Partial Leaf Angles")
+            o3d.visualization.draw_geometries(geoms, window_name="BFS Leaf Angles")
         else:
-            logger.info("No geometry to visualize (no leaf angles found).")
+            print("[WARN] No BFS angles to visualize or empty branch_data.")
 
-    def visualize_in_original(self):
-        """
-        Overlays the leaf angle visualization (arcs and extended regression lines)
-        onto the original point cloud.
-        """
-        logger.info("visualize_in_original => Overlaying leaf angles on original cloud.")
-        full_geo = [self.segmentation.pcd]
 
-        for i in range(len(self.segmentation.all_main_stem_points_up)):
-            stem_pts = np.vstack((self.segmentation.all_main_stem_points_up[i],
-                                  self.segmentation.all_main_stem_points_down[i]))
-            leaf_pts = self.segmentation.all_leaf_points[i]
-            if len(stem_pts) < 2 or len(leaf_pts) < 2:
+
+    # --------------------------------------------------------------------
+    # Visualization of Leaf Angles in Open3D
+    # --------------------------------------------------------------------
+
+    def visualize_leaf_angles(self):
+        """
+        Display in Open3D each branch’s trunk/leaf lines plus an arc
+        representing the BFS-based angle between them. Adds a small sphere at
+        the midpoint of the arc for better visual reference.
+        """
+        geoms = []
+        for i, bd in enumerate(self.branch_data):
+            trunk_pts = bd['stem_points']
+            leaf_pts  = bd['leaf_points']
+            angle_deg = bd.get('angle_degrees', None)
+
+            if trunk_pts.shape[0] < 2 or leaf_pts.shape[0] < 2:
+                print(f"[WARN] branch {i} => not enough trunk/leaf points => skipping.")
                 continue
 
-            x_stem, y_stem, z_stem = perform_linear_regression(stem_pts)
-            x_leaf, y_leaf, z_leaf = perform_linear_regression(leaf_pts)
+            # (A) point clouds for raw BFS-based data
+            geoms += self._pcd_from_points(trunk_pts, color=[1,0,0])  # red for stem
+            geoms += self._pcd_from_points(leaf_pts,  color=[0,1,0])  # green for leaf
 
-            stem_vec = np.array([x_stem[-1], y_stem[-1], z_stem[-1]]) - np.array([x_stem[0], y_stem[0], z_stem[0]])
-            leaf_vec = np.array([x_leaf[-1], y_leaf[-1], z_leaf[-1]]) - np.array([x_leaf[0], y_leaf[0], z_leaf[0]])
+            # (B) Fit lines in 3D using SVD => sample Nx3 line
+            trunk_reg_pts = self._fit_line_svd_as_points(trunk_pts, n_samples=30)
+            leaf_reg_pts  = self._fit_line_svd_as_points(leaf_pts,  n_samples=30)
 
-            branch_pt = np.array([x_stem[0], y_stem[0], z_stem[0]])
-            ext_stem = extend_vector(branch_pt, stem_vec)
-            ext_leaf = extend_vector(branch_pt, leaf_vec)
-            arc_pts = create_arc_points(branch_pt, ext_stem, ext_leaf)
+            # (C) create line sets for trunk & leaf "regression lines"
+            geoms += self._lineset_from_points(trunk_reg_pts, color=[0,0,1])   # blue line
+            geoms += self._lineset_from_points(leaf_reg_pts,  color=[1,0,1])   # magenta line
 
-            arr_pts = np.vstack([
-                branch_pt, ext_stem,
-                np.array([x_leaf[0], y_leaf[0], z_leaf[0]]), ext_leaf
-            ])
-            lines_idx = [[0, 1], [2, 3]]
-            ls = o3d.geometry.LineSet()
-            ls.points = o3d.utility.Vector3dVector(arr_pts)
-            ls.lines = o3d.utility.Vector2iVector(lines_idx)
-            ls.colors = o3d.utility.Vector3dVector([[0, 0, 1], [0, 0, 1]])
-            full_geo.append(ls)
+            # (D) add the arc + sphere at midpoint
+            if trunk_reg_pts.shape[0]>=2 and leaf_reg_pts.shape[0]>=2:
+                arc_geoms = self._arc_for_angle(
+                    trunk_reg_pts[0],
+                    trunk_reg_pts[-1],
+                    leaf_reg_pts[-1]
+                )
+                geoms.extend(arc_geoms)
 
-            arc_ls = o3d.geometry.LineSet()
-            arc_ls.points = o3d.utility.Vector3dVector(arc_pts)
-            arc_lines = [[kk, kk+1] for kk in range(len(arc_pts)-1)]
-            arc_ls.lines = o3d.utility.Vector2iVector(arc_lines)
-            arc_ls.colors = o3d.utility.Vector3dVector([[1, 0, 1] for _ in arc_lines])
-            full_geo.append(arc_ls)
-
-        o3d.visualization.draw_geometries(full_geo, window_name="Leaf Angles + Original Cloud")
-
-    def visualize_graph_with_types(self, show_original=False):
-        """
-        Visualize the centroid graph with nodes color-coded by type:
-          'stem' (red), 'branch_off' (blue), 'branch_or_leaf' (green).
-        Edges are drawn in black. Optionally, the original point cloud is also displayed.
-        """
-        logger.info("visualize_graph_with_types => Displaying color-coded centroid graph.")
-        geoms = []
-        if show_original:
-            geoms.append(self.segmentation.point_cloud)
-
-        pos = []
-        type_colors = []
-        for n in self.graph.nodes():
-            p = self.graph.nodes[n]['pos']
-            pos.append(p)
-            t = self.graph.nodes[n].get('type', 'unknown')
-            if t == 'stem':
-                type_colors.append([1, 0, 0])
-            elif t == 'branch_off':
-                type_colors.append([0, 0, 1])
-            elif t == 'branch_or_leaf':
-                type_colors.append([0, 1, 0])
+            # Finally, print the BFS-based angle
+            if angle_deg is not None:
+                print(f"[INFO] branch {i} => BFS-based angle= {angle_deg:.2f} deg")
             else:
-                type_colors.append([0.5, 0.5, 0.5])
-        pos = np.array(pos)
+                print(f"[INFO] branch {i} => BFS-based angle= ??? (not in branch_data)")
 
-        pcd_nodes = o3d.geometry.PointCloud()
-        pcd_nodes.points = o3d.utility.Vector3dVector(pos)
-        pcd_nodes.colors = o3d.utility.Vector3dVector(type_colors)
-        geoms.append(pcd_nodes)
+        if not geoms:
+            print("[WARN] no geometry => no BFS angles to display.")
+            return
 
-        edges = []
-        for n in self.graph.nodes():
-            for m in self.graph.neighbors(n):
-                if m > n:
-                    edges.append([n, m])
+        # Display in Open3D
+        o3d.visualization.draw_geometries(geoms, window_name="BFS Leaf Angles w/ Arc Spheres")
+
+    # --------------------------------------------------------------------
+    # Helpers for geometry creation and line fitting
+    # --------------------------------------------------------------------
+
+    def _pcd_from_points(self, points, color=[1,0,0]):
+        """
+        Helper: create a small geometry list with a single PointCloud of 'points'.
+        """
+        pcd = o3d.geometry.PointCloud()
+        pcd.points = o3d.utility.Vector3dVector(points)
+        pcd.paint_uniform_color(color)
+        return [pcd]
+
+    def _lineset_from_points(self, pts, color=[0,0,1]):
+        """
+        Given Nx3 points (like a 'regression line'), build a line set in a single color.
+        """
+        if len(pts) < 2:
+            return []
+        lines = [[i, i+1] for i in range(len(pts)-1)]
         ls = o3d.geometry.LineSet()
-        ls.points = o3d.utility.Vector3dVector(pos)
-        ls.lines = o3d.utility.Vector2iVector(np.array(edges))
-        ls.colors = o3d.utility.Vector3dVector([[0, 0, 0]] * len(edges))
-        geoms.append(ls)
+        ls.points = o3d.utility.Vector3dVector(pts)
+        ls.lines  = o3d.utility.Vector2iVector(lines)
+        ls.colors = o3d.utility.Vector3dVector([color]*len(lines))
+        return [ls]
 
-        o3d.visualization.draw_geometries(geoms, window_name="Centroid Graph (Types)")
+    def _fit_line_svd_as_points(self, pts, n_samples=30):
+        """
+        Similar to 'regression' but in 3D with SVD:
+          - Fit principal axis for 'pts'
+          - Create line from min_proj..max_proj at intervals => Nx3 array
 
+        Returns Nx3 array of sampled points along the best-fit line.
+        """
+        arr = np.asarray(pts)
+        center = arr.mean(axis=0)
+        if arr.shape[0] < 2:
+            return arr  # degenerate
+
+        # SVD => first principal component
+        uu, ss, vh = np.linalg.svd(arr - center)
+        direction  = vh[0] / np.linalg.norm(vh[0])  # principal axis
+
+        # Project all points onto that axis => find min/max
+        projs = np.dot((arr - center), direction)  # shape (N,)
+        min_t, max_t = np.min(projs), np.max(projs)
+
+        # Sample n_samples points from min_t..max_t
+        ts = np.linspace(min_t, max_t, n_samples)
+        line_pts = [center + t*direction for t in ts]
+        return np.array(line_pts)
+
+    # --------------------------------------------------------------------
+    # Arc creation + a sphere at its midpoint
+    # --------------------------------------------------------------------
+
+    def _arc_for_angle(self, stem_start, stem_end, leaf_end):
+        """
+        Creates:
+          1) A LineSet for the arc from (stem_start->stem_end) to (stem_start->leaf_end)
+          2) A small sphere at the midpoint of that arc
+
+        Returns
+        -------
+        geoms : list of open3d.geometry.Geometry
+            [arc_lineset, sphere_at_mid]
+        """
+        arc_pts = self._create_arc_points(stem_start, stem_end, leaf_end, num_points=30)
+        if arc_pts.shape[0] < 2:
+            return []  # no arc
+
+        # (1) build a lineset for the arc
+        arc_lines = [[i, i+1] for i in range(len(arc_pts)-1)]
+        arc_ls = o3d.geometry.LineSet()
+        arc_ls.points = o3d.utility.Vector3dVector(arc_pts)
+        arc_ls.lines  = o3d.utility.Vector2iVector(arc_lines)
+        arc_ls.colors = o3d.utility.Vector3dVector([[0,0,0]]* len(arc_lines))  # yellow
+
+        # (2) small sphere at midpoint
+        mid_idx = len(arc_pts)//2
+        mid_pt  = arc_pts[mid_idx]
+        sphere  = self._create_sphere_at_point(mid_pt, radius=0.002, color=[0,0,0])
+
+        return [arc_ls, sphere]
+
+    def _create_arc_points(self, center, end1, end2, num_points=30):
+        """
+        Create a set of 3D arc points from the vectors (center->end1) to (center->end2).
+        """
+        v1 = end1 - center
+        v2 = end2 - center
+        norm1 = np.linalg.norm(v1)
+        norm2 = np.linalg.norm(v2)
+        if norm1<1e-9 or norm2<1e-9:
+            return np.vstack([center, end1, end2])  # degenerate
+
+        v1u = v1 / norm1
+        v2u = v2 / norm2
+        dotv= np.clip(v1u.dot(v2u), -1,1)
+        angle= np.arccos(dotv)
+        if angle< 1e-9:
+            return np.vstack([center, end1])  # minimal angle => no arc
+        axis = np.cross(v1u, v2u)
+        a_len= np.linalg.norm(axis)
+        if a_len<1e-12:
+            # collinear
+            return np.vstack([center, end1, end2])
+        axis /= a_len
+
+        arc_pts= []
+        for i in range(num_points+1):
+            t= angle*(i/num_points)
+            rot_v = self._rotate_vector_around_axis(v1, axis, t)
+            arc_pts.append(center+ rot_v)
+        return np.array(arc_pts)
+
+    def _rotate_vector_around_axis(self, vec, axis, theta):
+        """
+        Rodrigues rotation formula: v_rot = v*cosθ + (k×v)*sinθ + k*(k·v)*(1−cosθ).
+        """
+        cos_t = np.cos(theta)
+        sin_t = np.sin(theta)
+        k = axis
+        v = vec
+        v_cos = v * cos_t
+        k_cross_v = np.cross(k, v)
+        v_sin = k_cross_v * sin_t
+        k_dot_v = np.dot(k, v)
+        v_k = k * (k_dot_v*(1 - cos_t))
+        return v_cos + v_sin + v_k
+
+    def _create_sphere_at_point(self, center, radius=0.00005, color=[0,0,0]):
+        """
+        Create an Open3D sphere geometry placed at 'center' with the given 'radius'.
+        """
+        sphere = o3d.geometry.TriangleMesh.create_sphere(radius=radius)
+        sphere.compute_vertex_normals()
+        # Move the sphere so its center is at 'center'
+        sphere.translate(center)
+        # Color the entire mesh
+        sphere.paint_uniform_color(color)
+        return sphere
 

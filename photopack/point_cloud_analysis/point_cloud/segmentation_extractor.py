@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import logging
 import copy
 import os
-import sys
+
 
 import networkx as nx
 from sklearn.neighbors import kneighbors_graph
@@ -19,13 +19,84 @@ logger = logging.getLogger(__name__)
 
 class Segmentation:
     """
-    A class for semi-automatic point-cloud segmentation, including:
-      - Downsampling + noise removal
-      - Graph-based segmentation
-      - MST-based refinement
-      - Multiple methods to detect & label 'large clusters'
-      - Exporting those clusters for manual refinement
-      - Re-importing & updating labels after manual segmentation
+    Segmentation: A class for semi-automatic segmentation and cluster refinement of 3D point clouds.
+
+    This class implements a complete workflow to segment a full-resolution point cloud into distinct 
+    clusters using a combination of downsampling, graph-based segmentation, MST-based refinement, and 
+    cluster filtering. The resulting segmentation can be used for further analysis, such as morphological 
+    measurements or manual refinement.
+
+    The workflow comprises the following major steps:
+
+      1. Preprocessing:
+         - Downsample the original point cloud using a voxel filter.
+         - Estimate and normalize point normals.
+         - Remove statistical outliers from the downsampled cloud.
+      
+      2. Graph-Based Segmentation:
+         - Apply an anisotropic scaling to the z-axis of the downsampled point cloud.
+         - Build a k-Nearest Neighbor graph from the scaled points.
+         - Prune graph edges that exceed a specified distance threshold.
+         - Compute the connected components of the pruned graph and assign a unique cluster label to each component.
+         - Store the resulting labels in `self.labels_downsampled`.
+
+      3. MST-Based Refinement:
+         - For each (or selected) cluster, compute a distance matrix and build a Minimum Spanning Tree (MST).
+         - Cut the largest edges in the MST (up to a specified number of cuts) to refine clusters into subclusters.
+         - Update the downsampled labels accordingly.
+
+      4. Cluster Refinement:
+         - Remove clusters that are smaller than a given minimum cluster size by marking them as noise (label -1).
+
+      5. Mapping Labels to the Original Point Cloud:
+         - Use a KDTree-based nearest neighbor search to transfer the refined labels from the downsampled 
+           point cloud back to the original, full-resolution cloud.
+         - Store the mapped labels in `self.labels` and preserve the original points and colors in 
+           `self.points_array` and `self.colors_array` respectively.
+
+      6. Export and Manual Refinement (Optional):
+         - Export individual clusters as separate .ply files for manual segmentation or refinement.
+         - Update the labels with manually refined segmentation from external tools.
+         - Save and load the final segmented arrays (points, colors, and labels) for later processing.
+
+    Usage Example:
+        >>> import open3d as o3d
+        >>> pcd = o3d.io.read_point_cloud("plant.ply")
+        >>> seg = Segmentation(pcd, min_cluster_size=100)
+        >>> seg.preprocess(voxel_size=0.005, nb_neighbors=20, std_ratio=2.0)
+        >>> seg.graph_based_segmentation(k=30, z_scale=1.0, distance_threshold=0.02)
+        >>> seg.refine_with_mst_segmentation(num_cuts=1)
+        >>> seg.refine_clusters(min_cluster_size=100)
+        >>> seg.map_labels_to_original()
+        >>> seg.segment_and_store()
+        >>> seg.visualize_downsampled()
+        >>> seg.visualize_segments_original()
+
+    Attributes:
+        original_pcd (o3d.geometry.PointCloud): The original, full-resolution point cloud.
+        pcd (o3d.geometry.PointCloud): A deep copy of the original point cloud used for processing.
+        pcd_downsampled (o3d.geometry.PointCloud): The downsampled version of the point cloud.
+        labels_downsampled (np.ndarray): Cluster labels obtained from graph-based segmentation on the downsampled cloud.
+        labels (np.ndarray): Cluster labels mapped back to the original point cloud.
+        points_array (np.ndarray): The original point cloud's points (stored after mapping labels).
+        colors_array (np.ndarray): The original point cloud's colors.
+        labels_array (np.ndarray): The final set of labels for the original point cloud.
+        min_cluster_size (int): The minimum number of points a cluster must have to be retained.
+        
+        # For graph-based segmentation:
+        sections (list): (Optional) Horizontal slices of the point cloud (if used in another context).
+        sections_analysis (list): Results from per-slice DBSCAN clustering (if applicable).
+        graph_structure (dict): Adjacency information linking clusters across slices (if applicable).
+        continuous_structures (list): Continuous vertical structures identified across slices (if applicable).
+
+        centroids_pcd (o3d.geometry.PointCloud): Aggregated centroids from the clusters, used to build the final graph.
+        graph (networkx.Graph): The k-NN graph constructed from the aggregated centroids (after pruning and refinement).
+        branch_off_nodes (list): Nodes in the graph identified as branch-off (potential branch connection points).
+
+    Note:
+        This class supports a semi-automatic segmentation workflow that allows for both automated clustering 
+        and manual refinement. The final segmented data (clusters, graph, and mapped labels) can be used for 
+        downstream analysis such as computing leaf angles, morphological measurements, or visualization.
     """
 
     def __init__(self, point_cloud, min_cluster_size=100):
@@ -282,7 +353,6 @@ class Segmentation:
 
         elif method == "kmeans":
             # Cluster the cluster sizes themselves
-            from sklearn.cluster import KMeans
             arr_2d = sizes_array.reshape(-1, 1)
             km = KMeans(n_clusters=kmeans_clusters, random_state=42)
             km.fit(arr_2d)
@@ -491,6 +561,7 @@ class Segmentation:
         unique_sorted = sorted(unique_lbls)
         for i, u in enumerate(unique_sorted):
             color_lookup[u] = cmap(i / max(1, len(unique_sorted)))[:3]
+        print(color_lookup)
         color_list = []
         for l in lbls:
             if l == -1:
