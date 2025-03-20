@@ -485,7 +485,6 @@ class Segmentation:
     def segment_and_store(self):
         """
         Capture final arrays (points, colors, labels) for the original cloud.
-        This is required before saving or manual updates.
         """
         if self.labels is None:
             raise ValueError("Labels not mapped to original. Call map_labels_to_original() first.")
