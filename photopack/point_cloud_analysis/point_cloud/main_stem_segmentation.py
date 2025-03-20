@@ -1571,14 +1571,7 @@ class MainStemSegmentation:
         # ---------------------------------------------------------------
         # 3) Build adjacency (A + B), bridging, negative-cost DAG
         # ---------------------------------------------------------------
-        #   => We'll do exactly what the standalone script does: 
-        #      For adjacency A => bridging => negative-cost => trunk
-        #      For adjacency B => bridging => negative-cost => trunk
-        #      Then pick whichever trunk is more negative cost.
-        # 
-        # NOTE: We replicate the same bridging calls as your script, 
-        # but you can unify if you want.
-        # ---------------------------------------------------------------
+
         ### --- adjacency A
         adjA = self.build_adjacency_bipartite(max_dist=0.1)
         GA, node_mapA, cpointsA = self.build_cost_graph(self.slice_results, adjA, trunk_axis, alpha=alpha)
@@ -1689,11 +1682,7 @@ class MainStemSegmentation:
             ag_map[nd] = (si,cj)
         self.aggregated_centroids_map = ag_map
 
-        # 7) (optional) REFINE => if you still want outlier removal or 
-        #    the "2 stem + 1 leaf neighbor" requirement,
-        #    but do it AFTER we've labeled them as branch_off. 
-        #    If you want to skip them to match the script exactly, 
-        #    comment these out:
+        # 7) (optional) REFINE => if you still want outlier removal 
         # ---------------------------------------------------------------
         if debug:
             print("[DEBUG] => now refine outlier branch_off, if any.")
