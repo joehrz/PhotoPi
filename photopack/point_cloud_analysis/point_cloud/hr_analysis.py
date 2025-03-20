@@ -1,14 +1,12 @@
-# photopack/point_cloud_analysis/point_cloud/hr_analysis.py
-
 import numpy as np
 import open3d as o3d
-import matplotlib.pyplot as plt
 import logging
+import copy
+import matplotlib.pyplot as plt
 
-from photopack.point_cloud_analysis.utils.helpers import cartesian_to_cylindrical
 from photopack.point_cloud_analysis.point_cloud.convex_hull import ConvexHullAnalyzer
+from photopack.point_cloud_analysis.point_cloud.main_stem_segmentation import MainStemSegmentation
 
-# Configure logging (optional if already configured in main.py)
 logger = logging.getLogger(__name__)
 
 
@@ -19,267 +17,273 @@ class HRAnalyzer:
 
         Args:
             point_cloud (open3d.geometry.PointCloud): The processed point cloud.
-            scale (float): Scaling factor based on turntable diameter.
+            scale (float): Scaling factor based on turntable diameter or known reference.
         """
-        self.point_cloud = point_cloud
-        self.points = np.asarray(point_cloud.points)
+        self.original_pcd = point_cloud
+        self.pcd = copy.deepcopy(point_cloud)
         self.scale = scale
 
-        # Attributes to store analysis results
-        self.height_density = None
-        self.height_mean_r = None
+        # Computed results
+        self.height = None
         self.max_radius = None
+        self.height_unscaled = None
+        self.max_radius_unscaled = None
         self.canopy_volume = None
-        self.hr_ratio_density = None
-        self.hr_ratio_mean_r = None
+        self.hr_ratio = None
+        self.z_max = None  # For visualization
 
-        # Additional attributes for internal computations
-        self.z_min_density = None
-        self.z_min_mean_r = None
-        self.z_max = None
-        self.z_slice_centers_density = None
-        self.densities_smooth = None
-        self.z_slice_centers_mean_r = None
-        self.mean_r_values = None
-        self.r_values = None
+        # Debug/visualization data
+        self.bottom_cluster_pts = None         # All points in the bottom cluster
+        self.bottom_cluster_lowest_pts = None  # The subset with the absolute min z in that cluster
 
-    def compute_height(self, z_slice_height=0.01):
+    def analyze_hr_with_mainstem(
+        self,
+        alpha=1.0,
+        beta=0.5,
+        raindrop_alpha=1.0,
+        raindrop_beta=1.0,
+        use_trunk_axis=True,
+        debug=True
+    ):
         """
-        Computes the plant height using two methods: density-based and mean radial distance.
+        1) Use MainStemSegmentation to run the full pipeline (slicing, adjacency, bridging, etc.).
+        2) Identify the base node from seg.base_node along the trunk path.
+        3) Retrieve the actual cluster points in that base node’s slice.
+        4) Shift the entire point cloud by that bottom cluster's centroid so that 
+           the cluster is 'balanced' around the origin.
+        5) Compute height, radius, volume, and H/R ratio.
 
-        Args:
-            z_slice_height (float, optional): The height of each z-slice for analysis. Defaults to 0.01.
+        After recentering, the physically lowest point of the cluster may have negative z 
+        (if it lies below its centroid), but the cluster’s average is at the origin.
         """
-        # Detect z_min using density-based method
-        (self.z_min_density,
-         self.z_slice_centers_density,
-         self.densities_smooth) = self._detect_main_stem_bottom(z_slice_height)
+        logger.info("[analyze_hr_with_mainstem] Running MainStemSegmentation pipeline.")
+        seg = MainStemSegmentation(self.pcd)
 
-        # Detect z_min using mean radial distance method
-        (self.z_min_mean_r,
-         self.z_slice_centers_mean_r,
-         self.mean_r_values) = self._detect_main_stem_bottom_mean_r(z_slice_height)
+        # 1) Run the new pipeline (slicing, bridging, trunk extraction, etc.)
+        seg.run_full_pipeline(
+            alpha=alpha,
+            beta=beta,
+            raindrop_alpha=raindrop_alpha,
+            raindrop_beta=raindrop_beta,
+            use_trunk_axis=use_trunk_axis,
+            debug=debug
+        )
 
-        # Calculate z_max
-        self.z_max = np.max(self.points[:, 2])
+        # 2) Identify base node from the trunk path
+        base_node = seg.base_node
+        trunk_path = seg.trunk_path
+        if base_node is None or not trunk_path:
+            logger.warning("No base_node / trunk_path found; cannot compute HR metrics.")
+            return
 
-        # Calculate plant heights
-        self.height_density = (self.z_max - self.z_min_density) * self.scale
-        self.height_mean_r = (self.z_max - self.z_min_mean_r) * self.scale
+        logger.info(f"[analyze_hr_with_mainstem] trunk_path length={len(trunk_path)}, base_node={base_node}")
 
-    def compute_radius(self):
-        """
-        Computes the maximum radius of the plant.
-        """
-        x = self.points[:, 0]
-        y = self.points[:, 1]
-        self.r_values = np.sqrt(x**2 + y**2)
-        self.max_radius = np.max(self.r_values) * self.scale
+        # 3) Retrieve the cluster points belonging to that base node
+        #    The new segmentation pipeline keeps:
+        #      - self.aggregated_centroids_map[node_id] -> (slice_i, cluster_j)
+        #      - self.slice_results[slice_i][cluster_j]['points']
+        slice_i, cluster_j = seg.aggregated_centroids_map[base_node]
+        self.bottom_cluster_pts = seg.slice_results[slice_i][cluster_j]['points']
 
-    def compute_volume(self):
-        """
-        Computes the canopy volume using the convex hull of the point cloud.
-        """
-        convex_hull_analyzer = ConvexHullAnalyzer(self.point_cloud)
-        self.canopy_volume = convex_hull_analyzer.compute_convex_hull_volume(scale=self.scale)
-
-    def compute_ratio(self):
-        """
-        Computes the Height-to-Radius ratio using both height estimation methods.
-        """
-        if self.max_radius != 0:
-            self.hr_ratio_density = self.height_density / self.max_radius
-            self.hr_ratio_mean_r = self.height_mean_r / self.max_radius
+        # (Optional) identify the absolute lowest points in that cluster
+        if len(self.bottom_cluster_pts) > 0:
+            z_min_cluster = np.min(self.bottom_cluster_pts[:, 2])
+            mask_lowest = (self.bottom_cluster_pts[:, 2] == z_min_cluster)
+            self.bottom_cluster_lowest_pts = self.bottom_cluster_pts[mask_lowest]
+            logger.info(f"[analyze_hr_with_mainstem] bottom cluster => total={len(self.bottom_cluster_pts)}, "
+                        f"lowest subset={len(self.bottom_cluster_lowest_pts)}, z_min={z_min_cluster:.3f}")
         else:
-            self.hr_ratio_density = None
-            self.hr_ratio_mean_r = None
+            logger.warning("Bottom cluster is empty; skipping re-center.")
+            return
 
-    def analyze_hr(self):
-        """
-        Runs the complete H/R analysis, computing height, radius, volume, and ratios.
-        """
-        self.compute_height()
-        self.compute_radius()
-        self.compute_volume()
-        self.compute_ratio()
+        # 4) Shift the entire point cloud by the centroid of this bottom cluster
+        self._recenter_bottom_cluster_by_centroid()
 
-        # Log analysis results
-        logger.info(f"Plant Height (Density Method): {self.height_density:.2f} cm")
-        logger.info(f"Plant Height (Mean R Method): {self.height_mean_r:.2f} cm")
-        logger.info(f"Max Radius: {self.max_radius:.2f} cm")
-        logger.info(f"Canopy Volume: {self.canopy_volume:.2f} cm³")
-        logger.info(f"Height-to-Radius Ratio (Density Method): {self.hr_ratio_density:.2f}")
-        logger.info(f"Height-to-Radius Ratio (Mean R Method): {self.hr_ratio_mean_r:.2f}")
+        # 5) Compute height, radius, volume, H/R ratio
+        self._compute_height()
+        self._compute_radius()
+        self._compute_volume()
+        self._compute_hr_ratio()
 
-    def plot_density_vs_z(self):
-        """
-        Plots the point density near the origin versus Z using the density-based method.
-        """
-        plt.figure(figsize=(10, 6))
-        plt.plot(self.z_slice_centers_density, self.densities_smooth, label='Point Density Near Origin')
-        plt.axvline(self.z_min_density, color='red', linestyle='dashed', linewidth=2,
-                    label=f'Estimated Z Min (Density Method): {self.z_min_density:.2f}')
-        plt.xlabel('Z-Value (Height)')
-        plt.ylabel('Point Density Near Origin')
-        plt.title('Density of Points Near Origin vs Z (Density-Based Method)')
-        plt.legend()
-        plt.grid(True)
-        plt.show()
+        logger.info(
+            f"[analyze_hr_with_mainstem] Final => "
+            f"Height={self.height:.2f} cm, "
+            f"Radius={self.max_radius:.2f} cm, "
+            f"Volume={self.canopy_volume:.2f} cm³, "
+            f"H/R={self.hr_ratio:.2f}"
+        )
 
-    def plot_mean_r_vs_z(self):
+    def _recenter_bottom_cluster_by_centroid(self):
         """
-        Plots the mean radial distance versus Z using the mean radial distance method.
+        Shift the original point cloud by the *centroid* (x,y,z) of bottom_cluster_pts,
+        so the entire cluster is 'balanced' around (0,0,0).
         """
-        plt.figure(figsize=(10, 6))
-        plt.plot(self.z_slice_centers_mean_r, self.mean_r_values, label='Mean Radial Distance')
-        plt.axvline(self.z_min_mean_r, color='green', linestyle='dashed', linewidth=2,
-                    label=f'Estimated Z Min (Mean R Method): {self.z_min_mean_r:.2f}')
-        plt.xlabel('Z-Value (Height)')
-        plt.ylabel('Mean Radial Distance')
-        plt.title('Mean Radial Distance vs Z (Mean Radial Distance Method)')
-        plt.legend()
-        plt.grid(True)
-        plt.show()
+        pts = np.asarray(self.pcd.points)
+        if len(pts) == 0:
+            logger.warning("Point cloud is empty, skipping recenter.")
+            return
+
+        if self.bottom_cluster_pts is None or len(self.bottom_cluster_pts) == 0:
+            logger.warning("[_recenter_bottom_cluster_by_centroid] No bottom cluster data; skipping.")
+            return
+
+        # 1) compute the centroid of bottom_cluster_pts
+        centroid_3d = np.mean(self.bottom_cluster_pts, axis=0)
+        logger.info(f"[_recenter_bottom_cluster_by_centroid] Shifting by centroid={centroid_3d}")
+
+        # 2) shift the entire cloud
+        pts -= centroid_3d
+        self.pcd.points = o3d.utility.Vector3dVector(pts)
+
+        logger.info("[_recenter_bottom_cluster_by_centroid] Done => bottom cluster centroid at (0,0,0).")
+
+    # ----------------------------------------------------------
+    # 2. Compute Basic Metrics (Height, Radius, Volume)
+    # ----------------------------------------------------------
+    def _compute_height(self):
+        """
+        After recentering, height is max(Z) * scale.
+        """
+        pts = np.asarray(self.pcd.points)
+        if len(pts) == 0:
+            self.height = 0.0
+            return
+        self.z_max = np.max(pts[:, 2])
+        self.height = self.z_max * self.scale
+        self.height_unscaled = self.z_max
+
+    def _compute_radius(self):
+        """
+        Max radius from origin in xy-plane, then times scale.
+        """
+        pts = np.asarray(self.pcd.points)
+        if len(pts) == 0:
+            self.max_radius = 0.0
+            return
+        r_vals = np.sqrt(pts[:, 0]**2 + pts[:, 1]**2)
+        self.max_radius = np.max(r_vals) * self.scale
+        self.max_radius_unscaled = np.max(r_vals)
+
+    def _compute_volume(self):
+        """
+        Use the convex hull to compute volume of the recentered point cloud.
+        """
+        if len(self.pcd.points) == 0:
+            self.canopy_volume = 0.0
+            return
+        hull_analyzer = ConvexHullAnalyzer(self.pcd)
+        self.canopy_volume = hull_analyzer.compute_convex_hull_volume(scale=self.scale)
+
+    def _compute_hr_ratio(self):
+        """
+        H/R ratio = self.height / self.max_radius
+        """
+        if not self.max_radius or self.max_radius == 0:
+            self.hr_ratio = None
+        else:
+            self.hr_ratio = self.height / self.max_radius
+
+    # ----------------------------------------------------------
+    # Visualization
+    # ----------------------------------------------------------
+    def visualize_with_open3d(self):
+        """
+        Show the recentered point cloud + base (0,0,0) + top (0,0,z_max)
+        plus highlight the bottom cluster or lowest subset if available.
+        """
+        geoms = []
+
+        # 1) recentered point cloud
+        geoms.append(self.pcd)
+
+        # 2) Add coordinate axes
+        coord_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.5)
+        geoms.append(coord_frame)
+
+        # 3) Possibly place spheres for base & top if we computed z_max
+        if self.z_max is None:
+            pts = np.asarray(self.pcd.points)
+            self.z_max = np.max(pts[:, 2]) if len(pts) else 0.0
+
+        sphere_base = o3d.geometry.TriangleMesh.create_sphere(radius=0.01)
+        sphere_base.paint_uniform_color([1, 0, 0])  # red
+        sphere_base.translate([0, 0, 0])
+
+        sphere_top = o3d.geometry.TriangleMesh.create_sphere(radius=0.01)
+        sphere_top.paint_uniform_color([0, 1, 0])  # green
+        sphere_top.translate([0, 0, self.z_max])
+        geoms.extend([sphere_base, sphere_top])
+
+        # # 4) line from base to top
+        line_set = o3d.geometry.LineSet()
+        line_set.points = o3d.utility.Vector3dVector([
+            [0, 0, 0],
+            [0, 0, self.z_max]
+        ])
+        line_set.lines = o3d.utility.Vector2iVector([[0, 1]])
+        line_set.colors = o3d.utility.Vector3dVector([[0, 0, 0]])  # black
+        geoms.append(line_set)
+
+        # 5) display
+        o3d.visualization.draw_geometries(geoms, window_name="HR Analysis Visualization")
 
     def plot_height_vs_radius(self):
         """
-        Plots Height vs Radius of the plant with Z Min estimates from both methods.
+        Example: Plot Z vs. radius, if you want a quick 2D check.
         """
-        z_cyl = self.points[:, 2]
+        pts = np.asarray(self.pcd.points)
+        if len(pts) == 0:
+            logger.warning("No points available for plotting.")
+            return
+        r_vals = np.sqrt(pts[:, 0]**2 + pts[:, 1]**2)
+        z_cyl  = pts[:, 2]
+
         plt.figure(figsize=(10, 6))
-        plt.scatter(self.r_values, z_cyl, alpha=0.1, s=1, c='blue', label='Point Cloud')
-        plt.axhline(self.z_min_density, color='red', linestyle='dashed', linewidth=2,
-                    label=f'Z Min (Density Method): {self.z_min_density:.2f}')
-        plt.axhline(self.z_min_mean_r, color='green', linestyle='dashed', linewidth=2,
-                    label=f'Z Min (Mean R Method): {self.z_min_mean_r:.2f}')
+        plt.scatter(r_vals, z_cyl, alpha=0.1, s=1, c='blue', label='Point Cloud')
+
+        # reference line at z=0
+        plt.axhline(0.0, color='red', linestyle='dashed', linewidth=2, label='Z=0')
+
         plt.xlabel('Radius')
-        plt.ylabel('Height (Z)')
-        plt.title('Height vs Radius of Plant with Z Min Estimates')
+        plt.ylabel('Z')
+        plt.title('Height vs Radius (Recentered at Bottom Cluster Centroid)')
         plt.legend()
         plt.grid(True)
         plt.show()
 
-    # Internal helper methods
-    def _detect_main_stem_bottom(self, z_slice_height=0.01):
+    def plot_radius_vs_theta(self):
         """
-        Detects the bottom of the main stem using a density-based method.
-
-        Args:
-            z_slice_height (float, optional): The height of each z-slice for analysis. Defaults to 0.01.
-
-        Returns:
-            tuple: Estimated Z Min, Z slice centers, and smoothed densities.
+        Plot a polar plot of theta and radius of the points.
         """
-        x = self.points[:, 0]
-        y = self.points[:, 1]
-        z = self.points[:, 2]
-
-        # Calculate radial distances
-        r = np.sqrt(x**2 + y**2)
-
-        # Adaptive r_threshold
-        r_threshold = np.percentile(r, 5)
-
-        # Define z-slices
-        z_min = np.min(z)
-        z_max = np.max(z)
-        z_slices = np.arange(z_min, z_max, z_slice_height)
-
-        densities = []
-        z_slice_centers = []
-
-        for z_start in z_slices:
-            z_end = z_start + z_slice_height
-            # Select points within the current z-slice
-            mask_z = (z >= z_start) & (z < z_end)
-            x_slice = x[mask_z]
-            y_slice = y[mask_z]
-            # Calculate radial distance from origin
-            r_slice = np.sqrt(x_slice**2 + y_slice**2)
-            # Count points within r_threshold
-            num_points = np.sum(r_slice <= r_threshold)
-            densities.append(num_points)
-            z_slice_centers.append(z_start + z_slice_height / 2)
-
-        densities = np.array(densities)
-        z_slice_centers = np.array(z_slice_centers)
-
-        # Smooth the density curve
-        from scipy.ndimage import gaussian_filter1d
-        sigma = len(densities) * 0.02
-        densities_smooth = gaussian_filter1d(densities, sigma=sigma)
-
-        # Compute the first derivative
-        density_derivative = np.diff(densities_smooth) / z_slice_height
-
-        # Adaptive derivative threshold
-        mean_derivative = np.mean(density_derivative)
-        std_derivative = np.std(density_derivative)
-        derivative_threshold = mean_derivative + 2 * std_derivative
-
-        indices = np.where(density_derivative > derivative_threshold)[0]
-
-        if len(indices) > 0:
-            z_min_index = indices[0]
-            z_min_estimated = z_slice_centers[z_min_index]
-        else:
-            # Default to a percentile
-            z_min_estimated = np.percentile(z, 5)
-
-        return z_min_estimated, z_slice_centers, densities_smooth
-
-    def _detect_main_stem_bottom_mean_r(self, z_slice_height=0.01):
-        """
-        Detects the bottom of the main stem using the mean radial distance method.
-
-        Args:
-            z_slice_height (float, optional): The height of each z-slice for analysis. Defaults to 0.01.
-
-        Returns:
-            tuple: Estimated Z Min, Z slice centers, and mean radial values.
-        """
-        x = self.points[:, 0]
-        y = self.points[:, 1]
-        z = self.points[:, 2]
-
-        z_min = np.min(z)
-        z_max = np.max(z)
-        z_slices = np.arange(z_min, z_max, z_slice_height)
-
-        mean_r_values = []
-        z_slice_centers = []
-
-        for z_start in z_slices:
-            z_end = z_start + z_slice_height
-            mask_z = (z >= z_start) & (z < z_end)
-            x_slice = x[mask_z]
-            y_slice = y[mask_z]
-            r_slice = np.sqrt(x_slice**2 + y_slice**2)
-            if len(r_slice) > 0:
-                mean_r = np.mean(r_slice)
-                mean_r_values.append(mean_r)
-                z_slice_centers.append(z_start + z_slice_height / 2)
-
-        mean_r_values = np.array(mean_r_values)
-        z_slice_centers = np.array(z_slice_centers)
-
-        # Compute relative changes
-        mean_r_diff = np.diff(mean_r_values)
-        relative_changes = mean_r_diff / mean_r_values[:-1]
-
-        # Adaptive threshold for significant drop
-        mean_change = np.mean(relative_changes)
-        std_change = np.std(relative_changes)
-        threshold_drop = mean_change - 1 * std_change  # Adjust the multiplier as needed
-
-        indices = np.where(relative_changes < threshold_drop)[0]
-
-        if len(indices) > 0:
-            z_min_index = indices[0]
-            z_min_estimated = z_slice_centers[z_min_index]
-        else:
-            z_min_estimated = np.percentile(z, 5)
-
-        return z_min_estimated, z_slice_centers, mean_r_values
-
-
+        # Increase font sizes globally
+        plt.rcParams.update({'font.size': 24,
+                             'axes.labelsize': 24,
+                             'axes.titlesize': 18,
+                             'xtick.labelsize': 24,
+                             'ytick.labelsize': 24,
+                             'legend.fontsize': 24})
+    
+        pts = np.asarray(self.pcd.points)
+        if len(pts) == 0:
+            logger.warning("No points available for plotting.")
+            return
+        # Compute radius and theta
+        r_vals = np.sqrt(pts[:, 0]**2 + pts[:, 1]**2)
+        theta_vals = np.arctan2(pts[:, 1], pts[:, 0])
+        max_r = np.max(r_vals)
+        max_r_idx = np.argmax(r_vals)  # Get the index of the maximum radius
+        max_r_theta = theta_vals[max_r_idx]  # Get theta at that index
+    
+        # Create polar plot
+        plt.figure(figsize=(10, 6))
+        ax = plt.subplot(111, projection='polar')
+        ax.scatter(theta_vals, r_vals, alpha=0.1, s=1, c='blue', label='Point Cloud')
+        ax.scatter(max_r_theta, max_r, alpha=1, s=150, c='red', label='Max R')
+    
+        # You can also set font sizes individually
+        # ax.set_title('Polar Plot of Radius vs Theta', fontsize=18)
+        ax.tick_params(axis='both', which='major', labelsize=20)
+    
+        plt.legend(loc='lower right', fontsize=20)
+        plt.tight_layout()  # Adjusts the plot to make room for larger font sizes
+        plt.show()
