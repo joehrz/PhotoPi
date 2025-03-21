@@ -1,14 +1,16 @@
 import copy
 import math
+import os
 import numpy as np
 import open3d as o3d
 import networkx as nx
 from sklearn.cluster import DBSCAN
 from sklearn.neighbors import NearestNeighbors
-from sklearn.linear_model import LinearRegression
 from scipy.optimize import linear_sum_assignment
 from collections import deque
 import matplotlib.pyplot as plt
+from collections import defaultdict
+
 class MainStemSegmentation:
     """
     MainStemSegmentation: A class to segment the main stem from a full plant 
@@ -130,6 +132,7 @@ class MainStemSegmentation:
         self.branch_off_nodes = []
         self.branch_data = []
         self.labeled_pcd = None
+        self.output_path = []
 
     ##########################################################################
     # STEP 1: Slicing & Clustering
@@ -1231,63 +1234,84 @@ class MainStemSegmentation:
     # STEP 6: Map Labels => Original Points
     ##########################################################################
 
-    def map_labels_to_original_points_unified(self, G, slice_results, aggregated_map):
+    def map_labels_to_original_points_unified(self, G, slice_results, aggregated_map, original_pcd, output_path=None, base=None):
         """
-        Map each graph node type back to the original points. 
-        Branch_off => unify as 'stem'.
-
-        Parameters
-        ----------
-        G : nx.Graph or nx.DiGraph
-            The final labeled graph.
-        slice_results : list of list of dict
-            The same slice cluster data structure.
-        aggregated_map : list of tuple
-            Indexed by node_id => (slice_i, cluster_j).
-
-        Returns
-        -------
-        out_pcd : o3d.geometry.PointCloud
-            Color-coded by 'stem'(red), 'leaf'(green), 'unknown'(gray).
-        labeled_arr : np.ndarray, shape (N,4)
-            (x, y, z, label_int), where label_int=0(stem),1(leaf),2(unknown).
+        Modified to include all original points, filling gaps via nearest-neighbor label propagation.
         """
-        color_map= {
-            'stem':    [1,0,0],
-            'leaf':    [0,1,0],
-            'unknown': [0.6,0.6,0.6]
-        }
-        label_map= {
-            'stem':0,
-            'leaf':1,
-            'unknown':2
-        }
+        color_map = {'stem': [1,0,0], 'leaf': [0,1,0], 'unknown': [0.6,0.6,0.6]}
+        label_map = {'stem': 0, 'leaf': 1, 'unknown': 2}
 
-        labeled_pts= []
-        labeled_cols= []
-        labeled_arr= []
+        # Step 1: Generate initial labeled data from graph and slice_results
+        cluster_to_nodes = defaultdict(list)
+        for node_id, (si, cj) in enumerate(aggregated_map):
+            cluster_to_nodes[(si, cj)].append(node_id)
 
-        for nd in G.nodes():
-            t= G.nodes[nd].get('type','unknown')
-            if t=='branch_off':
-                t='stem'
-            col= color_map.get(t, [0.6,0.6,0.6])
-            lbl= label_map.get(t,2)
+        labeled_pts = []
+        labeled_cols = []
+        labeled_arr = []
 
-            si, cj= aggregated_map[nd]
-            pts= slice_results[si][cj]['points']
-            for p in pts:
-                labeled_pts.append(p)
-                labeled_cols.append(col)
-                labeled_arr.append([p[0], p[1], p[2], lbl])
+        for si, slice in enumerate(slice_results):
+            for cj, cluster in enumerate(slice):
+                nodes = cluster_to_nodes.get((si, cj), [])
+                types = []
+                for nd in nodes:
+                    t = G.nodes[nd].get('type', 'unknown')
+                    if t == 'branch_off':
+                        t = 'stem'
+                    types.append(t)
+                final_type = 'stem' if 'stem' in types else 'leaf' if 'leaf' in types else 'unknown'
+                col = color_map[final_type]
+                lbl = label_map[final_type]
+                for p in cluster['points']:
+                    labeled_pts.append(p)
+                    labeled_cols.append(col)
+                    labeled_arr.append([p[0], p[1], p[2], lbl])
+        labeled_arr = np.array(labeled_arr, dtype=float)
+        # Step 2: Identify missing points in the original_pcd and propagate labels
+        original_points = np.asarray(original_pcd.points)
+        if len(labeled_pts) == 0:
+            # Edge case: No labels found; mark all as unknown
+            filled_labels = np.full((len(original_points), 1), 2)
+        else:
+            # Build KDTree from initially labeled points
+            labeled_pcd = o3d.geometry.PointCloud()
+            labeled_pcd.points = o3d.utility.Vector3dVector(np.array(labeled_pts))
+            tree = o3d.geometry.KDTreeFlann(labeled_pcd)
 
-        out_pcd= o3d.geometry.PointCloud()
-        arr_pts= np.array(labeled_pts, dtype=float)
-        arr_col= np.array(labeled_cols, dtype=float)
-        out_pcd.points= o3d.utility.Vector3dVector(arr_pts)
-        out_pcd.colors= o3d.utility.Vector3dVector(arr_col)
+            filled_labels = []
+            radius = 1e-6  # Adjust based on point cloud density (e.g., 1mm for real-world data)
+            for p in original_points:
+                # Check if the point is already labeled (exact match)
+                [k, idx, _] = tree.search_radius_vector_3d(p, radius)
+                if k > 0:
+                    lbl = labeled_arr[idx[0], 3]
+                else:
+                    # Find nearest neighbor and inherit label
+                    [k, idx, _] = tree.search_knn_vector_3d(p, 1)
+                    lbl = labeled_arr[idx[0], 3] if k > 0 else 2
+                filled_labels.append(lbl)
+            filled_labels = np.array(filled_labels)
 
-        labeled_arr= np.array(labeled_arr, dtype=float)
+        # Step 3: Create output with ALL original points
+        out_pcd = o3d.geometry.PointCloud()
+        out_pcd.points = original_pcd.points
+        out_colors = np.array([color_map['stem' if lbl == 0 else 'leaf' if lbl == 1 else 'unknown'] 
+                            for lbl in filled_labels])
+        out_pcd.colors = o3d.utility.Vector3dVector(out_colors)
+        labeled_arr = np.hstack([original_points, filled_labels.reshape(-1, 1)])
+
+        points = np.asarray(original_pcd.points)
+        colors = np.asarray(original_pcd.colors)
+        labels = filled_labels.astype(np.uint8)
+        if output_path:
+            np.savez(
+                os.path.join(output_path, base),
+                points=points,        # XYZ coordinates (N,3)
+                colors=colors,        # RGB colors (N,3)
+                labels=labels         # Class labels (N,) 0=stem, 1=leaf, 2=unknown
+            )
+            print(f"Saved labeled data to {output_path} with {len(points)} points")
+            
         return out_pcd, labeled_arr
 
 
@@ -1534,9 +1558,10 @@ class MainStemSegmentation:
         delta=1.0,
         use_trunk_axis=True,
         debug=True,
+        output_path=None,
+        base=None
     ):
         """
-        Reorder the operations to match the standalone script’s logic/sequence:
         1) slicing & clustering
         2) build adjacency A & B
         3) bridging subgraphs
@@ -1557,7 +1582,7 @@ class MainStemSegmentation:
             self.cluster_slices(
                 base_scale=5.0, 
                 min_samples=25, 
-                dist_merge=0.02, 
+                dist_merge=0.025, 
                 min_pts_in_cluster=15
             )
 
@@ -1739,7 +1764,11 @@ class MainStemSegmentation:
         self.labeled_pcd, labeled_arr = self.map_labels_to_original_points_unified(
             self.G_neg_final,
             self.slice_results,
-            self.aggregated_centroids_map
+            self.aggregated_centroids_map,
+            self.original_pcd,
+            output_path=output_path,
+            base=base
+
         )
         if debug:
             print(f"[INFO] Created labeled PCD => #points= {len(self.labeled_pcd.points)}")
