@@ -83,7 +83,7 @@ PhotoPi consists of several interconnected components:
 1. **Clone the Repository:**
 
     ```bash
-    git clone https://github.com/Dxxc/PhotoPi.git
+    git clone https://github.com/joehrz/PhotoPi.git
     cd PhotoPi
     ```
 
