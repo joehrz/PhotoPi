@@ -134,7 +134,7 @@ def load_point_cloud(filename):
         logger.error(f"Error loading point cloud: {e}")
         sys.exit(1)
 
-def compute_metrics(point_cloud, modules_to_run, seg_mode, scale, top_percentage):
+def compute_metrics(point_cloud, modules_to_run, seg_mode, scale, output_path, base):
     """
     Call each module (convex_hull, hr_analysis, leaf_angles, projection, etc.)
     Return a dict with all relevant metrics. 
@@ -147,7 +147,6 @@ def compute_metrics(point_cloud, modules_to_run, seg_mode, scale, top_percentage
         from photopack.point_cloud_analysis.point_cloud.processing import PointCloudProcessor
         proc = PointCloudProcessor(point_cloud)
         proc.process()
-        point_cloud = proc.get_processed_point_cloud()
         logger.info("Finished 'processing' module.")
 
 
@@ -183,10 +182,12 @@ def compute_metrics(point_cloud, modules_to_run, seg_mode, scale, top_percentage
         
        
         hr.analyze_hr_with_mainstem(
-            alpha=1.0,
-            beta=2.0,
+            alpha=5.0,
+            beta=1.0,
             raindrop_alpha=1.0,
             raindrop_beta=1.0,
+            gamma=5.0,
+            delta=20,
             use_trunk_axis=True,
             debug=True
         )
@@ -249,14 +250,16 @@ def compute_metrics(point_cloud, modules_to_run, seg_mode, scale, top_percentage
 
         # 2) Run the entire pipeline in one shot:
         segmentation.run_full_pipeline(
-            alpha=1.0,
-            beta=1.5,
-            raindrop_alpha=0.5,
+            alpha=5.0,
+            beta=1.0,
+            raindrop_alpha=1.0,
             raindrop_beta=1.0,
-            gamma=15.0,
-            delta=30.0,
+            gamma=5.0,
+            delta=20.0,
             use_trunk_axis=True,
-            debug=True
+            debug=True,
+            output_path=output_path,
+            base=base
         )
 
         segmentation.visualize_final_graph_types()
@@ -276,9 +279,9 @@ def compute_metrics(point_cloud, modules_to_run, seg_mode, scale, top_percentage
             la = LeafAngleAnalyzer(segmentation)
             la.compute_leaf_angles_node_bfs(
                 n_main_stem=5,
-                n_leaf=4,
+                n_leaf=5,
                 flip_if_obtuse=True,
-                min_leaf_for_angle=4,
+                min_leaf_for_angle=5,
                 max_bfs_depth=5
                 )
             la.visualize_leaf_angles()
@@ -338,7 +341,7 @@ def compute_metrics(point_cloud, modules_to_run, seg_mode, scale, top_percentage
 
     return row_data
 
-def process_single_file(ply_file, modules_to_run, seg_mode, json_scale, top_percentage):
+def process_single_file(ply_file, modules_to_run, seg_mode, json_scale, output_path):
     """
     Perform the actual pipeline on one .ply file, returning a dict of metrics.
     """
@@ -356,7 +359,7 @@ def process_single_file(ply_file, modules_to_run, seg_mode, json_scale, top_perc
     pcd = load_point_cloud(ply_file)
 
     # 2) Compute all metrics
-    row_data = compute_metrics(pcd, modules_to_run, seg_mode, scale, top_percentage)
+    row_data = compute_metrics(pcd, modules_to_run, seg_mode, scale, output_path, base)
     
     # 3) Insert the "Cultivar" to row_data
     row_data["Cultivar"] = cultivar
@@ -366,6 +369,7 @@ def process_single_file(ply_file, modules_to_run, seg_mode, json_scale, top_perc
 def main():
     parser = argparse.ArgumentParser(description='Full pipeline with JSON config, multi leaf angles, logging metrics.')
     parser.add_argument('path', help='A .ply file OR a directory of .ply files.')
+    parser.add_argument('--output', help='Path to output')
     parser.add_argument('--diameter', type=float, default=1.3, help='Ring diameter in cm.')
     parser.add_argument('--module', choices=[
         'processing','convex_hull','hr_analysis','leaf_angles','projection','segmentation', 'mainstem_segmentation', 'all'
@@ -385,7 +389,7 @@ def main():
     json_config = args.json_config
     json_scale =args.json_scale
     csv_output = args.csv_out
-    top_percentage = 60
+    output_path = args.output
 
     # If no modules specified or 'all', run them all
     available_modules = ['processing','convex_hull','hr_analysis','leaf_angles','projection','segmentation', 'mainstem_segmentation']
@@ -423,7 +427,7 @@ def main():
 
     # 4) Process each .ply
     for ply_file in ply_files:
-        row_data = process_single_file(ply_file, modules_to_run, seg_mode, json_scale, top_percentage)
+        row_data = process_single_file(ply_file, modules_to_run, seg_mode, json_scale, output_path)
         # Update CSV (overwriting if cultivar exists)
         append_to_csv(row_data)
 
