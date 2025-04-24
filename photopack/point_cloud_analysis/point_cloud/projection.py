@@ -23,7 +23,7 @@ class ProjectionAnalyzer:
         self.alpha_shape = None
         self.alpha_shape_area = None
 
-    def compute_alpha_shape_area(self, alpha=1.0):
+    def compute_alpha_shape_area(self, alpha=1.0, scale=1.0):
         """
         Computes the alpha shape area of the point cloud projected onto the XY plane.
         
@@ -35,7 +35,8 @@ class ProjectionAnalyzer:
         """
         # Project points onto XY plane
         xy_points = self.points[:, :2]
-        
+        xy_points = xy_points * scale
+
         # Compute alpha shape
         self.alpha_shape = alphashape.alphashape(xy_points, alpha)
         
@@ -84,44 +85,57 @@ class ProjectionAnalyzer:
         plt.figure()
         if isinstance(self.alpha_shape, Polygon):
             plt.fill(*self.alpha_shape.exterior.xy, color='blue', alpha=0.2,
-                     label=f'Alpha Shape (Area: {alpha_shape_area:.2f})')
+                     label=f'Alpha Shape (Area: {alpha_shape_area:.2f} cm^2)')
         elif isinstance(self.alpha_shape, MultiPolygon):
             for polygon in self.alpha_shape:
                 plt.fill(*polygon.exterior.xy, color='blue', alpha=0.2)
-        plt.title(f"Alpha Shape Area: {alpha_shape_area:.2f} square units")
-        plt.xlabel("X-axis")
-        plt.ylabel("Y-axis")
+        #plt.title(f"Alpha Shape Area: {alpha_shape_area:.2f} square units")
+        plt.xlabel("x-axis (cm)")
+        plt.ylabel("y-axis (cm)")
         plt.legend()
         if save_fig:
             plt.savefig(filename)
         plt.show()
 
-    def plot_points_and_alpha_shape(self, save_fig=False, filename="points_and_alpha_shape.png"):
+    def plot_points_and_alpha_shape(self, save_fig=False, scale=1.0, filename="points_and_alpha_shape.svg"):
         """
         Plots the original points and the alpha shape together.
         
         Args:
             save_fig (bool, optional): Whether to save the figure. Defaults to False.
-            filename (str, optional): Filename for saving the figure. Defaults to "points_and_alpha_shape.png".
+            filename (str, optional): Filename for saving the figure. Defaults to "points_and_alpha_shape.svg".
         """
         if self.alpha_shape is None:
             logger.warning("Alpha shape has not been computed yet.")
             return
         
         xy_points = self.points[:, :2]
+        xy_points = xy_points * scale
         alpha_shape_area = self.alpha_shape_area
-        plt.figure()
+        plt.figure(figsize=(12, 6))  # Adjust figure size if desired
+        
+        # Plot points
         plt.plot(xy_points[:, 0], xy_points[:, 1], 'o', label='Points', markersize=3)
+        
+        # Plot the alpha shape
         if isinstance(self.alpha_shape, Polygon):
             plt.fill(*self.alpha_shape.exterior.xy, color='blue', alpha=0.2,
-                     label=f'Alpha Shape (Area: {alpha_shape_area:.2f})')
+                    label=f'Alpha Shape (Area: {alpha_shape_area:.2f} cm$^2$)')
         elif isinstance(self.alpha_shape, MultiPolygon):
             for polygon in self.alpha_shape:
                 plt.fill(*polygon.exterior.xy, color='blue', alpha=0.2)
-        plt.title(f"Alpha Shape Area: {alpha_shape_area:.2f} square units")
-        plt.xlabel("X-axis")
-        plt.ylabel("Y-axis")
-        plt.legend()
+        
+        # Increase axis labels and tick labels
+        plt.xlabel("X-axis (cm)", fontsize=16)
+        plt.ylabel("Y-axis (cm)", fontsize=16)
+        plt.xticks(fontsize=16)
+        plt.yticks(fontsize=16)
+        
+        # Increase legend font size
+        plt.legend(fontsize=14)
+        
+        # Save the figure if requested (as both SVG and PNG)
         if save_fig:
-            plt.savefig(filename)
+            plt.savefig(filename, bbox_inches='tight')
+            plt.savefig("points_and_alpha_shape.png", bbox_inches='tight')
         plt.show()

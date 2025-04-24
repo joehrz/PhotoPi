@@ -53,44 +53,17 @@ class LeafAngleAnalyzer:
         self.main_leaf_angle = None
         self.main_leaf_branch_index = None
 
-
-
     def compute_leaf_angles_node_bfs(
-        self,
-        n_main_stem=5,
-        n_leaf=5,
-        flip_if_obtuse=True,
-        min_leaf_for_angle=4,
-        max_bfs_depth=5
-    ):
+            self,
+            n_main_stem=5,
+            n_leaf=5,
+            min_leaf_for_angle=4,
+            max_bfs_depth=5
+        ):
         """
-        Replicate the BFS approach from your segmentation code:
-         - For each branch_off node in the trunk, gather 'stem_points' around it
-         - Collect connected 'leaf_points' by BFS
-         - Fit lines (SVD in 3D) and compute the angle
-
-        Parameters
-        ----------
-        n_main_stem : int
-            How many trunk nodes above/below the branch_off node we gather.
-        n_leaf : int
-            Max leaf nodes to collect by BFS.
-        flip_if_obtuse : bool
-            If True, angles >90 deg => use (180 - angle).
-        min_leaf_for_angle : int
-            If BFS finds fewer leaf nodes => skip angle.
-        max_bfs_depth : int
-            BFS limit for counting leaves if you want to ensure enough leaf points.
-
-        Returns
-        -------
-        self.branch_data : list of dict
-            Each dict = {
-               'branch_off'  : node_id,
-               'stem_points' : Nx3,
-               'leaf_points' : Mx3,
-               'angle_degrees' : float
-            }
+        For each branch_off node, gather nearby stem & leaf points by BFS,
+        fit regression lines via SVD, and compute the full 0–180° angle
+        between them.
         """
         G         = self.segmentation.G_neg_final
         cpoints   = self.segmentation.cpoints_final
@@ -101,14 +74,11 @@ class LeafAngleAnalyzer:
             print("[ERROR] Segmentation data missing or invalid.")
             return []
 
-        # We'll define some BFS helpers
         def undirected_neighbors(u):
             return set(G.successors(u)) | set(G.predecessors(u))
 
         def count_leaf_nodes_bfs(start, depth_limit):
-            visited = set()
-            queue   = deque([(start,0)])
-            leaf_cnt= 0
+            visited, queue, leaf_cnt = set(), deque([(start,0)]), 0
             while queue:
                 nd, dpt = queue.popleft()
                 if nd in visited:
@@ -116,115 +86,99 @@ class LeafAngleAnalyzer:
                 visited.add(nd)
                 if G.nodes[nd].get('type')=='leaf':
                     leaf_cnt += 1
-                if dpt< depth_limit:
+                if dpt < depth_limit:
                     for nb in undirected_neighbors(nd):
                         if nb not in visited:
                             queue.append((nb, dpt+1))
             return leaf_cnt
 
         def collect_leaf_nodes_bfs(start, n_leaf):
-            visited = set()
-            queue   = deque()
-            leaves  = []
-            # Start from immediate neighbors that are 'leaf'
+            visited, queue, leaves = set(), deque(), []
             for nb in undirected_neighbors(start):
                 if G.nodes[nb].get('type')=='leaf':
                     queue.append(nb)
-
-            while queue and len(leaves)< n_leaf:
+            while queue and len(leaves) < n_leaf:
                 curr = queue.popleft()
                 if curr in visited:
                     continue
                 visited.add(curr)
                 if G.nodes[curr].get('type')=='leaf':
                     leaves.append(curr)
-                    # expand further leaf neighbors
                     for nxt in undirected_neighbors(curr):
                         if nxt not in visited and G.nodes[nxt].get('type')=='leaf':
                             queue.append(nxt)
             return leaves
 
         def fit_line_svd(pts):
-            """
-            SVD-based line fit in 3D. Returns (center, direction).
-            """
             arr = np.asarray(pts)
-            if arr.shape[0]<2:
-                return (None,None)
+            if arr.shape[0] < 2:
+                return (None, None)
             center = arr.mean(axis=0)
             uu, ss, vh = np.linalg.svd(arr - center)
-            direction  = vh[0] / np.linalg.norm(vh[0])
-            return (center, direction)
+            direction = vh[0] / np.linalg.norm(vh[0])
+            return center, direction
 
         self.branch_data = []
         trunk_set = set(trunk_ids)
 
         for b_off in b_offs:
-            # Ensure the branch_off node is actually on trunk
             if b_off not in trunk_set:
-                print(f"[WARN] skip b_off= {b_off}, not on trunk_path.")
                 continue
 
-            # Count leaf nodes within BFS => skip if not enough
             leaf_count = count_leaf_nodes_bfs(b_off, max_bfs_depth)
             if leaf_count < min_leaf_for_angle:
-                print(f"[SKIP] branch_off= {b_off}: only {leaf_count} leaves => skip angle.")
                 continue
 
-            # Collect trunk nodes: n_main_stem above + below
-            idx      = trunk_ids.index(b_off)
-            aboveIDs = trunk_ids[idx+1 : idx+1+n_main_stem]
-            belowIDs = trunk_ids[max(0, idx-n_main_stem) : idx]
-            trunk_nodes  = aboveIDs + belowIDs
-            trunk_points = []
-            for tn in trunk_nodes:
-                if tn < len(cpoints):
-                    trunk_points.append(cpoints[tn])
-            # if we don't have at least 2 points => skip
+            idx        = trunk_ids.index(b_off)
+            aboveIDs   = trunk_ids[idx+1 : idx+1+n_main_stem]
+            belowIDs   = trunk_ids[max(0, idx-n_main_stem) : idx]
+            trunk_nodes = aboveIDs + belowIDs
+            trunk_points = [cpoints[tn] for tn in trunk_nodes if tn < len(cpoints)]
             if len(trunk_points) < 2:
                 continue
 
-            # Collect leaf nodes => BFS
-            leaf_nodes = collect_leaf_nodes_bfs(b_off, n_leaf)
-            leaf_points= []
-            for ln in leaf_nodes:
-                if ln < len(cpoints):
-                    leaf_points.append(cpoints[ln])
+            leaf_nodes  = collect_leaf_nodes_bfs(b_off, n_leaf)
+            leaf_points = [cpoints[ln] for ln in leaf_nodes if ln < len(cpoints)]
             if len(leaf_points) < 2:
                 continue
 
-            # Fit lines
             stem_center, stem_dir = fit_line_svd(trunk_points)
             leaf_center, leaf_dir = fit_line_svd(leaf_points)
             if stem_dir is None or leaf_dir is None:
                 continue
 
-            # Compute angle
-            dot_val = np.clip(np.dot(stem_dir, leaf_dir), -1.0, 1.0)
+            # Full 0–180° angle, no flipping
+            dot_val   = np.clip(np.dot(stem_dir, leaf_dir), -1.0, 1.0)
             angle_deg = np.degrees(np.arccos(dot_val))
-            if flip_if_obtuse and angle_deg>90:
-                angle_deg = 180 - angle_deg
+
+            z_position = float(cpoints[b_off][2]) if b_off < len(cpoints) else float('-inf')
 
             self.branch_data.append({
-                'branch_off':   b_off,
-                'stem_points':  np.array(trunk_points),
-                'leaf_points':  np.array(leaf_points),
-                'angle_degrees': angle_deg
+                'branch_off':    b_off,
+                'stem_points':   np.array(trunk_points),
+                'leaf_points':   np.array(leaf_points),
+                'angle_degrees': angle_deg,
+                'z_position':    z_position
             })
-            print(f"[NODE-BFS ANGLE] b_off= {b_off}, angle= {angle_deg:.2f}")
+            print(f"[NODE-BFS ANGLE] b_off={b_off}, angle={angle_deg:.2f}°, z={z_position:.2f}")
 
-        # Pull out angles alone
         self.angles = [bd['angle_degrees'] for bd in self.branch_data]
 
-        # Optionally pick a "main_leaf_angle" if you want the largest or something
-        best_idx, best_val = None, None
+        # pick main leaf by highest z
+        best_idx, highest_z = None, float('-inf')
         for i, bd in enumerate(self.branch_data):
-            ang = bd['angle_degrees']
-            if best_val is None or (ang is not None and ang> best_val):
-                best_val = ang
-                best_idx= i
-        self.main_leaf_angle = best_val
-        self.main_leaf_branch_index = best_idx
+            z_pos = bd['z_position']
+            if z_pos > highest_z:
+                highest_z, best_idx = z_pos, i
+
+        if best_idx is not None:
+            self.main_leaf_angle = self.branch_data[best_idx]['angle_degrees']
+            self.main_leaf_branch_index = best_idx
+            print(f"[MAIN ANGLE] branch={best_idx}, angle={self.main_leaf_angle:.2f}°, z={highest_z:.2f}")
+        else:
+            self.main_leaf_angle = None
+            self.main_leaf_branch_index = None
+            print("[WARN] No main leaf angle found.")
 
         return self.branch_data
 

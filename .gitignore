@@ -23,9 +23,17 @@ env/
 *.log
 
 # Ignore Images file
-images
 *.png
 *.jpg
 
 # Ignore env file
 .env
+
+# Ignore point cloud files
+.ply
+
+# Ignore csv files
+.csv
+
+# Ignore json files
+.json

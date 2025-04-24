@@ -201,7 +201,7 @@ class PointCloudProcessor:
         self.points[:, 1] -= self.ring_center[1]
         logger.info("Adjusted point cloud center to align ring center with origin.")
 
-    def process(self):
+    def process(self, outpath):
         """
         Starts the processing steps.
         """
@@ -223,6 +223,8 @@ class PointCloudProcessor:
             else:
                 logger.warning("Ring center not estimated. Skipping center adjustment.")
             self.processed_point_cloud = self.point_cloud
+            self.visualize()
+            self.save_processed_point_cloud(outpath)
             logger.info("Point cloud processing completed.")
         except Exception as e:
             logger.error(f"Error during point cloud processing: {e}")

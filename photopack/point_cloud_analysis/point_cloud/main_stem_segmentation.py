@@ -10,6 +10,7 @@ from scipy.optimize import linear_sum_assignment
 from collections import deque
 import matplotlib.pyplot as plt
 from collections import defaultdict
+import plotly.graph_objects as go
 
 class MainStemSegmentation:
     """
@@ -1581,8 +1582,8 @@ class MainStemSegmentation:
         if not self.slice_results:
             self.cluster_slices(
                 base_scale=5.0, 
-                min_samples=25, 
-                dist_merge=0.025, 
+                min_samples=5, 
+                dist_merge=0.01, 
                 min_pts_in_cluster=15
             )
 
@@ -1856,6 +1857,151 @@ class MainStemSegmentation:
         ls.colors= o3d.utility.Vector3dVector(black)
 
         o3d.visualization.draw_geometries([pcd_nodes, ls], window_name="Final Graph + Types")
+
+
+    def visualize_final_graph_types_plotly(self):
+        """
+        Visualizes the final graph (G_neg_final) using Plotly.
+        Nodes are color-coded by type:
+        - 'stem' -> red
+        - 'branch_off' -> blue
+        - 'leaf' -> green
+        - others -> gray
+        Edges are drawn as black lines.
+        """
+        if self.G_neg_final is None:
+            print("[WARN] no final graph => run pipeline first.")
+            return
+
+        # Prepare node positions and colors.
+        node_positions = []
+        node_color_values = []  # we'll convert colors to rgb strings
+        nlist = list(self.G_neg_final.nodes())
+        for nd in nlist:
+            if (self.cpoints_final is not None) and (0 <= nd < len(self.cpoints_final)):
+                node_positions.append(self.cpoints_final[nd])
+            else:
+                node_positions.append([0, 0, 0])
+            node_type = self.G_neg_final.nodes[nd].get('type', 'unknown')
+            if node_type == 'stem':
+                color = [255, 0, 0]       # red
+            elif node_type == 'branch_off':
+                color = [0, 0, 255]       # blue
+            elif node_type == 'leaf':
+                color = [0, 255, 0]       # green
+            else:
+                color = [128, 128, 128]   # gray
+            # Convert RGB to Plotly rgb string.
+            rgb_str = f"rgb({color[0]},{color[1]},{color[2]})"
+            node_color_values.append(rgb_str)
+
+        arr_pos = np.array(node_positions, dtype=float)
+        
+        # Create a list of edges.
+        edges = []
+        for nd in nlist:
+            for nb in self.G_neg_final.neighbors(nd):
+                if nb > nd:
+                    edges.append([nd, nb])
+        
+        # Prepare edge line segments. We'll create lists with None between segments.
+        edge_x, edge_y, edge_z = [], [], []
+        for edge in edges:
+            idx1, idx2 = edge
+            x0, y0, z0 = arr_pos[idx1]
+            x1, y1, z1 = arr_pos[idx2]
+            edge_x.extend([x0, x1, None])
+            edge_y.extend([y0, y1, None])
+            edge_z.extend([z0, z1, None])
+        
+        # Create the node scatter plot.
+        node_trace = go.Scatter3d(
+            x=arr_pos[:, 0],
+            y=arr_pos[:, 1],
+            z=arr_pos[:, 2],
+            mode='markers',
+            marker=dict(
+                size=8,
+                color=node_color_values,
+                line=dict(width=1, color='black')
+            ),
+            hoverinfo='text',
+            text=[f"Node {nd}" for nd in nlist],
+            name="Nodes"
+        )
+        
+        # Create the edge trace.
+        edge_trace = go.Scatter3d(
+            x=edge_x,
+            y=edge_y,
+            z=edge_z,
+            mode='lines',
+            line=dict(color='black', width=2),
+            hoverinfo='none',
+            name="Edges"
+        )
+        
+        # Build custom legend entries for node types.
+        legend_entries = [
+            go.Scatter3d(
+                x=[None],
+                y=[None],
+                z=[None],
+                mode='markers',
+                marker=dict(size=10, color='rgb(255,0,0)', line=dict(width=1, color='black')),
+                name='Stem'
+            ),
+            go.Scatter3d(
+                x=[None],
+                y=[None],
+                z=[None],
+                mode='markers',
+                marker=dict(size=10, color='rgb(0,0,255)', line=dict(width=1, color='black')),
+                name='Branch Off'
+            ),
+            go.Scatter3d(
+                x=[None],
+                y=[None],
+                z=[None],
+                mode='markers',
+                marker=dict(size=10, color='rgb(0,255,0)', line=dict(width=1, color='black')),
+                name='Leaf'
+            ),
+            go.Scatter3d(
+                x=[None],
+                y=[None],
+                z=[None],
+                mode='markers',
+                marker=dict(size=10, color='rgb(128,128,128)', line=dict(width=1, color='black')),
+                name='Unknown'
+            )
+        ]
+        
+        # Combine all traces.
+        data = [edge_trace, node_trace] + legend_entries
+        
+        # Create the figure.
+        fig = go.Figure(data=data)
+        
+        fig.update_layout(
+            title="Final Graph with Node Types",
+            scene=dict(
+                xaxis_title="X",
+                yaxis_title="Y",
+                zaxis_title="Z",
+                xaxis=dict(tickfont=dict(size=14)),
+                yaxis=dict(tickfont=dict(size=14)),
+                zaxis=dict(tickfont=dict(size=14))
+            ),
+            legend=dict(font=dict(size=14)),
+            margin=dict(l=0, r=0, b=0, t=50)
+        )
+        
+        # Show the figure.
+        fig.show()
+
+
+
 
     def visualize_labeled_pcd(self):
         """

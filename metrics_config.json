@@ -1,0 +1,20 @@
+{
+  "headers": [
+    "Cultivar",
+    "H_Max", "R_Max", "H_over_R",
+    "V_100_unscaled", "V_60_unscaled", "V_40_unscaled",
+    "V_100",
+    "V_60", "V_40",
+    "H_over_V", "R_over_V",
+    "H_over_V_60", "R_over_V_60",
+    "H_over_V_40", "R_over_V_40",
+    "V_over_V_60", "V_over_V_40",
+    "V_60_over_V_40",
+    "Scale",
+    "Ring Diameter",
+    "plane_projection_area_unitless",
+    "plane_projection_area",
+    
+    "Leaf_angle_count"
+  ]
+}

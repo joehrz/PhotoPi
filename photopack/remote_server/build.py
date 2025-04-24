@@ -462,7 +462,7 @@ def main():
     logging.info(f"Workspace directory: {workspace}")
 
     # Check COLMAP installation
-    check_colmap_installed()
+    #check_colmap_installed()
 
     # Load configuration
     config = load_configuration(args.config)
@@ -521,7 +521,7 @@ def main():
 
     # Run COLMAP
     start_time = time.time()
-    run_colmap(work_space, config)
+    #run_colmap(work_space, config)
     elapsed_time = time.time() - start_time
     logging.info(f"COLMAP reconstruction completed in {elapsed_time:.2f} seconds.")
 

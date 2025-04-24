@@ -42,8 +42,10 @@ class HRAnalyzer:
         beta=0.5,
         raindrop_alpha=1.0,
         raindrop_beta=1.0,
+        gamma=2.0,
+        delta=1.0,
         use_trunk_axis=True,
-        debug=True
+        debug=True,
     ):
         """
         1) Use MainStemSegmentation to run the full pipeline (slicing, adjacency, bridging, etc.).
@@ -65,6 +67,8 @@ class HRAnalyzer:
             beta=beta,
             raindrop_alpha=raindrop_alpha,
             raindrop_beta=raindrop_beta,
+            gamma=gamma,
+            delta=delta,
             use_trunk_axis=use_trunk_axis,
             debug=debug
         )

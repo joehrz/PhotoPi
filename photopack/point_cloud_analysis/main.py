@@ -146,7 +146,7 @@ def compute_metrics(point_cloud, modules_to_run, seg_mode, scale, output_path, b
     if 'processing' in modules_to_run:
         from photopack.point_cloud_analysis.point_cloud.processing import PointCloudProcessor
         proc = PointCloudProcessor(point_cloud)
-        proc.process()
+        proc.process(output_path)
         logger.info("Finished 'processing' module.")
 
 
@@ -182,12 +182,12 @@ def compute_metrics(point_cloud, modules_to_run, seg_mode, scale, output_path, b
         
        
         hr.analyze_hr_with_mainstem(
-            alpha=5.0,
+            alpha=1.0,
             beta=1.0,
             raindrop_alpha=1.0,
             raindrop_beta=1.0,
-            gamma=5.0,
-            delta=20,
+            gamma=1.0,
+            delta=1.0,
             use_trunk_axis=True,
             debug=True
         )
@@ -214,9 +214,10 @@ def compute_metrics(point_cloud, modules_to_run, seg_mode, scale, output_path, b
     if 'projection' in modules_to_run:
         from photopack.point_cloud_analysis.point_cloud.projection import ProjectionAnalyzer
         proj = ProjectionAnalyzer(point_cloud)
-        area_scaled = proj.compute_alpha_shape_area(alpha=1.0)
+        area_scaled = proj.compute_alpha_shape_area(alpha=2.0, scale=44.49)
+        proj.plot_points_and_alpha_shape(save_fig=True, scale=44.49)
         row_data["plane_projection_area"] = area_scaled
-        row_data["plane_projection_area_unitless"] = area_scaled / (scale**2) if scale != 0 else area_scaled
+        row_data["plane_projection_area_unitless"] = area_scaled / (44.99**2) if scale != 0 else area_scaled
 
         logger.info(f"[projection] plane_projection_area={area_scaled:.2f}, plane_projection_area_unitless={row_data['plane_projection_area_unitless']}")
 
@@ -250,12 +251,12 @@ def compute_metrics(point_cloud, modules_to_run, seg_mode, scale, output_path, b
 
         # 2) Run the entire pipeline in one shot:
         segmentation.run_full_pipeline(
-            alpha=5.0,
+            alpha=1.0,
             beta=1.0,
             raindrop_alpha=1.0,
             raindrop_beta=1.0,
-            gamma=5.0,
-            delta=20.0,
+            gamma=1.0,
+            delta=1.0,
             use_trunk_axis=True,
             debug=True,
             output_path=output_path,
@@ -263,6 +264,7 @@ def compute_metrics(point_cloud, modules_to_run, seg_mode, scale, output_path, b
         )
 
         segmentation.visualize_final_graph_types()
+        segmentation.visualize_final_graph_types_plotly()
         logger.info("[mainstem_segmentation] Pipeline complete => trunk path extracted, labeled PCD available.")
 
         # The pipeline produces trunk_path, labeled_pcd, branch_off_nodes, etc.
@@ -280,7 +282,6 @@ def compute_metrics(point_cloud, modules_to_run, seg_mode, scale, output_path, b
             la.compute_leaf_angles_node_bfs(
                 n_main_stem=5,
                 n_leaf=5,
-                flip_if_obtuse=True,
                 min_leaf_for_angle=5,
                 max_bfs_depth=5
                 )
@@ -352,7 +353,7 @@ def process_single_file(ply_file, modules_to_run, seg_mode, json_scale, output_p
 
     with open(json_scale, "r") as f:
         config_data = json.load(f)
-    scale = config_data.get(cultivar_scale_lookup)
+    scale = config_data.get(cultivar_scale_lookup, 1.0)
     
 
     # 1) Load the point cloud
