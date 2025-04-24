@@ -260,12 +260,7 @@ class LeafAngleAnalyzer:
             leaf_pcd.paint_uniform_color([0,1,0])  # green
             geoms.append(leaf_pcd)
 
-            # Lines for trunk, leaf (just 2 endpoints if you want)
-            # Or do an SVD-based line for each
-            # We'll do a minimal approach => just from minZ to maxZ
-            # or re-use the 'fit_line_svd' function.
-            # ...
-            # For brevity, we won't show the entire line or arc code here:
+
             print(f"Branch {i} => angle= {angle_deg:.2f} deg")
 
         # show them
