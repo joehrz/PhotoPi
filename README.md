@@ -23,6 +23,25 @@ PhotoPi consists of several interconnected components:
 3. **Remote Server:** Facilitates deployment, management, and integration of PhotoPi into larger photogrammetry workflows.
 4. **Point Cloud Analysis:** Provides tools for processing and analyzing 3D models generated from captured images.
 
+## Hardware
+
+The following table provides a breakdown of the main components and associated costs for the photogrammetry rig setup:
+
+| **Part** | **Brand** | **Model** | **Price** | **Specs** | **Description** |
+|----------|-----------|-----------|-----------|-----------|-----------------|
+| Embedded system | Raspberry Pi | Raspberry Pi 4 Model B | $249.99 | Quad-core Cortex-A72, 4GB RAM, 40 pin GPIO header, 2-lane MIPI CSI camera port | Compact, low-cost computer board ideal for embedded applications |
+| 4 RGB Cameras | Arducam | 64MP Autofocus Quad-Camera Kit | $199 | WiFi/Bluetooth, Res: 4056 x 3040 px, FOV diagonal: 84° | High-resolution, auto-focus RGB cameras for detailed image capture |
+| Featureless Background | Rose Brand | 62" Poly Pro | $15.20 /yard | Fabric, Chroma Key Blue | Wrinkle-resistant fabric providing a uniform backdrop for imaging |
+| Stepper Motor | Adafruit | Stepper Motor HAT - mini kit | $27.95 | TB6612 chipset, 4.5VDC to 13.5VDC, unipolar or bipolar | Motor HAT (Hardware Attached on Top) designed for precise motion control with the Raspberry Pi |
+| Turntable | Ortery | PhotoCapture 360M | $1,200 | 28.956 and 39.878 cm diameter platforms | Software-controlled rotary table for consistent image capture angles |
+| Aluminum Extrusion | Misumi | | $950 | Aluminum alloy, Square shape, 40mm main frame and arms size, four side slots | Frame with stationary mounts, angle brackets, nuts and screws |
+| All-Purpose LED Grow Lights | Root Farm | | $145 each | 45W per panel, Grow area: 25 cm (10 in) x 55 cm (21.5 in) per panel, Adjustable legs with 360° swivel | Two growing light panels consisting of 3-band LEDs |
+
+## Wiring Diagram
+
+![Schematic of the modified wiring required to drive the the turntable stepper motor via the RPi and Adafruit DC & Stepper Motor HAT.](docs/images/pi_stepp_schem.svg)
+
+*Schematic of the modified wiring required to drive the the turntable stepper motor via the RPi and Adafruit DC & Stepper Motor HAT.*
 
 ## Requirements
 
