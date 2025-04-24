@@ -228,12 +228,6 @@ class LeafAngleAnalyzer:
 
         return self.branch_data
 
-    # -----------------------------------------------------
-    # (Optional) If you want to visualize BFS-based angles
-    # in Open3D, you can add a method similar to the old code
-    # but now you have the BFS-based trunk_points/leaf_points
-    # in self.branch_data. For example:
-    # -----------------------------------------------------
 
     def visualize_bfs_leaf_angles_open3d(self):
         """
