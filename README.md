@@ -39,11 +39,11 @@ The following table provides a breakdown of the main components and associated c
 
 ## Wiring Diagram
 
-<p align="center" width="100%">
-    <img width="33%" src="docs/images/pi_stepp_schem.svg">
-</p>
+<div style="text-align: center;">
+    ![Schematic of the modified wiring required to drive the the turntable stepper motor via the RPi and Adafruit DC & Stepper Motor HAT.](docs/images/pi_stepp_schem.svg)
 
-*Schematic of the modified wiring required to drive the the turntable stepper motor via the RPi and Adafruit DC & Stepper Motor HAT.*
+    *Schematic of the modified wiring required to drive the the turntable stepper motor.*
+</div>
 
 ## Requirements
 
@@ -275,48 +275,7 @@ To control and capture images directly from the Raspberry Pi (optional, dependin
 
 Configuration settings are managed through the params.json file located in the photopack/main_system/ directory. You can modify this file directly or use the GUI to adjust settings.
 
-## File Structure
 
-```plaintext
-PhotoPi/
-├── README.md
-├── setup.py
-├── deploy_to_pi.sh
-├── deploy_to_remote_server.sh
-└── photopack/ 
-    ├── __init__.py
-    ├── main_system/
-    │   ├── __init__.py
-    │   ├── gui.py
-    │   ├── network.py
-    │   ├── credentials.py
-    │   ├── config.py
-    │   ├── imagecapture.py
-    │   ├── params.json
-    │
-    ├── remote_server/
-    │   ├── __init__.py
-    │   ├── build.py
-    │   ├── config.yaml
-    │
-    ├── raspberry_pi/
-    │   ├── __init__.py
-    │   ├── turntable.py
-    │
-    └── point_cloud_analysis/
-        ├── __init__.py
-        ├── main.py
-        ├── point_cloud/
-        │   ├── __init__.py
-        │   ├── convex_hull.py
-        │   ├── processing.py
-        │   ├── hr_analysis.py
-        │   ├── projection.py
-        │   ├── leaf_angles.py
-        │
-        └── utils/
-            ├── __init__.py
-            └── helpers.py
 
 
 
