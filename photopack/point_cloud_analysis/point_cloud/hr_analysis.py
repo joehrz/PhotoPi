@@ -229,7 +229,7 @@ class HRAnalyzer:
 
     def plot_height_vs_radius(self):
         """
-        Example: Plot Z vs. radius, if you want a quick 2D check.
+        Example: Plot Z vs. radius, for a quick 2D check.
         """
         pts = np.asarray(self.pcd.points)
         if len(pts) == 0:
