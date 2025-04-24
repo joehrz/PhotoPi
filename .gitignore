@@ -30,6 +30,7 @@ env/
 .env
 
 # Ignore point cloud files
+point_cloud_data
 .ply
 
 # Ignore csv files
