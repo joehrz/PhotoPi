@@ -39,7 +39,9 @@ The following table provides a breakdown of the main components and associated c
 
 ## Wiring Diagram
 
-![Schematic of the modified wiring required to drive the the turntable stepper motor via the RPi and Adafruit DC & Stepper Motor HAT.](docs/images/pi_stepp_schem.svg)
+<p align="center" width="100%">
+    <img width="33%" src="docs/images/pi_stepp_schem.svg">
+</p>
 
 *Schematic of the modified wiring required to drive the the turntable stepper motor via the RPi and Adafruit DC & Stepper Motor HAT.*
 
