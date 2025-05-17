@@ -42,6 +42,8 @@ class HRAnalyzer:
         beta=0.5,
         raindrop_alpha=1.0,
         raindrop_beta=1.0,
+        gamma=10.0,
+        delta=5.0,
         use_trunk_axis=True,
         debug=True
     ):
@@ -65,6 +67,8 @@ class HRAnalyzer:
             beta=beta,
             raindrop_alpha=raindrop_alpha,
             raindrop_beta=raindrop_beta,
+            gamma=gamma,
+            delta=delta,
             use_trunk_axis=use_trunk_axis,
             debug=debug
         )
@@ -200,7 +204,7 @@ class HRAnalyzer:
         coord_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.5)
         geoms.append(coord_frame)
 
-        # 3) Possibly place spheres for base & top if we computed z_max
+        # 3) Possibly place spheres for base & top 
         if self.z_max is None:
             pts = np.asarray(self.pcd.points)
             self.z_max = np.max(pts[:, 2]) if len(pts) else 0.0
@@ -280,7 +284,6 @@ class HRAnalyzer:
         ax.scatter(theta_vals, r_vals, alpha=0.1, s=1, c='blue', label='Point Cloud')
         ax.scatter(max_r_theta, max_r, alpha=1, s=150, c='red', label='Max R')
     
-        # You can also set font sizes individually
         # ax.set_title('Polar Plot of Radius vs Theta', fontsize=18)
         ax.tick_params(axis='both', which='major', labelsize=20)
     
