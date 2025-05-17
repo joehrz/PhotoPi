@@ -93,10 +93,6 @@ class Segmentation:
         graph (networkx.Graph): The k-NN graph constructed from the aggregated centroids (after pruning and refinement).
         branch_off_nodes (list): Nodes in the graph identified as branch-off (potential branch connection points).
 
-    Note:
-        This class supports a semi-automatic segmentation workflow that allows for both automated clustering 
-        and manual refinement. The final segmented data (clusters, graph, and mapped labels) can be used for 
-        downstream analysis such as computing leaf angles, morphological measurements, or visualization.
     """
 
     def __init__(self, point_cloud, min_cluster_size=100):
@@ -398,7 +394,7 @@ class Segmentation:
     def export_clusters_for_manual_labeling(self, clusters_to_refine, filename, output_dir):
         """
         Export given cluster labels (from *original* labels) as separate .plys
-        so the user can manually split/refine them in Meshlab etc.
+        so they can be manually split/refine them in Meshlab.
 
         Args:
             clusters_to_refine (list): List of cluster labels (in self.labels) to export.
