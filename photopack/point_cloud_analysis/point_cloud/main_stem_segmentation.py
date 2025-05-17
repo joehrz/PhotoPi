@@ -423,60 +423,6 @@ class MainStemSegmentation:
         return axis
 
 
-
-
-    # def compute_robust_principal_axis(self):
-    #     """
-    #     Perform a robust PCA to find trunk axis by focusing on upper portion of plant.
-    
-    #     Returns
-    #     -------
-    #     axis : np.ndarray (3,)
-    #         The principal axis of the centroids, oriented so that axis[2]>=0.
-    #     """
-    #     all_c = []
-    #     z_values = []
-    
-    #     # Collect all centroids and their z-values
-    #     for slc in self.slice_results:
-    #         for cd in slc:
-    #             all_c.append(cd['centroid'])
-    #             z_values.append(cd['centroid'][2])
-    
-    #     if len(all_c) < 2:
-    #         return np.array([0, 0, 1], dtype=float)
-    
-    #     arr = np.array(all_c)
-    #     z_values = np.array(z_values)
-    
-    #     # Find z-height cutoff (use upper half of plant)
-    #     z_cutoff = np.median(z_values)
-    
-    #     # Use only points in upper portion for initial PCA
-    #     upper_mask = z_values > z_cutoff
-    #     if np.sum(upper_mask) >= 3:  # Need minimum points for PCA
-    #         upper_arr = arr[upper_mask]
-    #         upper_centered = upper_arr - upper_arr.mean(axis=0)
-    #         _, _, vT = np.linalg.svd(upper_centered, full_matrices=False)
-    #         axis = vT[0]
-    #         if axis[2] < 0:
-    #             axis = -axis
-    #     else:
-    #         # Fallback to vertical if not enough points
-    #         axis = np.array([0, 0, 1], dtype=float)
-    
-    #     return axis
-
-
-
-
-
-
-
-
-
-
-
     def build_cost_graph(self, slice_results, adjacency, trunk_axis, alpha=1.0):
         """
         Build a directed graph with edges weighted by cost = dist + alpha*angle_to_trunk.
@@ -751,156 +697,6 @@ class MainStemSegmentation:
 
 
 
-
-
-
-
-
-
-
-    # def build_raindrop_negcost_digraph(self, cpoints, adjacency, node_map,
-    #                                    alpha=1.0, beta=1.0, trunk_axis=None,
-    #                                    reverse_z=False, debug=True):
-    #     """
-    #     Build a negative-cost DAG for trunk extraction:
-    #      - If not reverse_z: edge (u->v) if z_v < z_u, cost= -(alpha*horiz + beta*angle).
-    #      - If reverse_z:     edge (v->u) if z_v >= z_u, symmetrical logic.
-
-    #     Parameters
-    #     ----------
-    #     cpoints : np.ndarray
-    #         (N,3) centroids.
-    #     adjacency : dict
-    #         The adjacency dict from bipartite matching.
-    #     node_map : dict
-    #         (slice_i, cluster_j) -> node_id
-    #     alpha : float
-    #         Factor for horizontal cost.
-    #     beta : float
-    #         Factor for angle cost.
-    #     trunk_axis : np.ndarray or None
-    #         The approximate vertical axis; if None, use [0,0,-1].
-    #     reverse_z : bool
-    #         If True, we invert the direction logic: 
-    #         edges go from higher-z to lower-z.
-    #     debug : bool
-    #         If True, prints extra debug info.
-
-    #     Returns
-    #     -------
-    #     G : nx.DiGraph
-    #         The negative-cost DAG for trunk extraction.
-    #     """
-    #     G = nx.DiGraph()
-    #     N = len(cpoints)
-    #     for nd in range(N):
-    #         G.add_node(nd)
-
-    #     if trunk_axis is None:
-    #         ref_axis = np.array([0,0,-1], dtype=float)
-    #     else:
-    #         ref_axis = trunk_axis / (np.linalg.norm(trunk_axis)+1e-12)
-    #         if ref_axis[2]>0:
-    #             ref_axis = -ref_axis
-
-    #     def measure_angle(vec, axis):
-    #         mag = np.linalg.norm(vec)
-    #         if mag<1e-12:
-    #             return 0.0
-    #         dotv = max(-1.0, min(1.0, vec.dot(axis)/mag))
-    #         return math.acos(dotv)
-
-    #     total_edges= 0
-    #     for key, neighbors in adjacency.items():
-    #         ndA= node_map[key]
-    #         zA = cpoints[ndA][2]
-    #         for nb in neighbors:
-    #             ndB= node_map[nb]
-    #             zB = cpoints[ndB][2]
-
-    #             if not reverse_z:
-    #                 # normal => edge if zB < zA
-    #                 if zB< zA:
-    #                     vec = cpoints[ndB] - cpoints[ndA]
-    #                     horiz= np.linalg.norm(vec[:2])
-    #                     ang  = measure_angle(vec, ref_axis)
-    #                     cost_uv= -(alpha*horiz + beta*ang)
-    #                     G.add_edge(ndA, ndB, weight= cost_uv)
-    #                     total_edges+=1
-    #             else:
-    #                 # reversed => edge if zB >= zA => (ndB->ndA)
-    #                 if zB>= zA:
-    #                     vec= cpoints[ndA] - cpoints[ndB]
-    #                     horiz= np.linalg.norm(vec[:2])
-    #                     ang  = measure_angle(vec, ref_axis)
-    #                     cost_vu= -(alpha*horiz + beta*ang)
-    #                     G.add_edge(ndB, ndA, weight= cost_vu)
-    #                     total_edges+=1
-
-    #     if debug:
-    #         print(f"[DEBUG] build_raindrop_negcost_digraph => #edges= {total_edges}")
-    #     return G
-
-    # def longest_path_in_DAG_negcost(self, G, top_node_id, debug=True):
-    #     """
-    #     Given a negative-cost DAG, find the path that yields minimal sum 
-    #     (which is effectively the 'longest' path in positive sense).
-
-    #     We do a topological sort, then DP to pick min-sum path from top_node_id.
-
-    #     Parameters
-    #     ----------
-    #     G : nx.DiGraph
-    #         The negative-cost DAG.
-    #     top_node_id : int
-    #         The node from which we begin the path (highest z).
-    #     debug : bool
-    #         If True, prints debug info.
-
-    #     Returns
-    #     -------
-    #     base_node : int
-    #         The node at the other end of the minimal-cost path.
-    #     path : list of int
-    #         The sequence of nodes in that trunk path.
-    #     """
-    #     topo_order= list(nx.topological_sort(G))
-    #     if top_node_id not in topo_order:
-    #         # fallback
-    #         return (top_node_id, [top_node_id])
-
-    #     maxDist= {}
-    #     pred   = {}
-    #     for nd in G.nodes():
-    #         maxDist[nd]= float('inf')  # we want minimal sum => store inf
-    #         pred[nd]= None
-    #     maxDist[top_node_id]= 0.0
-
-    #     for nd in topo_order:
-    #         if maxDist[nd]== float('inf'):
-    #             continue
-    #         cost_nd= maxDist[nd]
-    #         for nb in G[nd]:
-    #             w= G[nd][nb]['weight']
-    #             alt= cost_nd + w
-    #             if alt< maxDist[nb]:
-    #                 maxDist[nb]= alt
-    #                 pred[nb]= nd
-
-    #     best_node= top_node_id
-    #     best_val = maxDist[top_node_id]
-    #     for nd in G.nodes():
-    #         if maxDist[nd]< best_val:
-    #             best_val= maxDist[nd]
-    #             best_node= nd
-    #     path=[]
-    #     tmp= best_node
-    #     while tmp is not None:
-    #         path.append(tmp)
-    #         tmp= pred[tmp]
-    #     path.reverse()
-    #     return (best_node, path)
-
     def invert_graph_direction(self, G_in, cpoints):
         """
         Produce a new DiGraph G_out in which each edge is reversed. 
@@ -947,21 +743,6 @@ class MainStemSegmentation:
                 G.nodes[nd]["type"] = "stem"
             else:
                 G.nodes[nd]["type"] = "leaf"
-
-    # def label_branch_off_nodes(self, G, min_degree=3):
-    #     """
-    #     Mark any node with degree >= min_degree as 'branch_off'.
-
-    #     Parameters
-    #     ----------
-    #     G : nx.Graph or nx.DiGraph
-    #         The graph in which to label nodes.
-    #     min_degree : int
-    #         Degree threshold for labeling branch_off.
-    #     """
-    #     for nd in G.nodes():
-    #         if G.degree(nd) >= min_degree:
-    #             G.nodes[nd]['type'] = 'branch_off'
 
     def label_branch_off_nodes(self, G, min_degree=3):
         """
@@ -1581,8 +1362,8 @@ class MainStemSegmentation:
         if not self.slice_results:
             self.cluster_slices(
                 base_scale=5.0, 
-                min_samples=25, 
-                dist_merge=0.025, 
+                min_samples=10, 
+                dist_merge=0.03, 
                 min_pts_in_cluster=15
             )
 
