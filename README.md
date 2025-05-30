@@ -70,9 +70,9 @@ The following table provides a breakdown of the main components and associated c
 2.  **Environment:** `python -m venv venv && source venv/bin/activate` (or `venv\Scripts\activate` on Windows)
 3.  **Install:** `pip install -e .[all]` (for all components)
     * For component-specific installation, see `setup.py` options and linked READMEs.
-4.  **Raspberry Pi Setup:** Run `./deploy_to_pi.sh`. See [Raspberry Pi README](photopack/raspberry_pi/README.md) for details.
-5.  **Remote Server Setup:** Run `./deploy_to_remote_server.sh`. See [Remote Server README](photopack/remote_server/README.md) for details.
-6.  **Configuration:** Set up your `.env` file for credentials and review component-specific configurations (e.g., `params.json`, `config.yaml`). See [Configuration Overview](#configuration-overview) below and linked READMEs.
+4.  **Raspberry Pi Setup:** Run `./deploy_to_pi.sh`.
+5.  **Remote Server Setup:** Run `./deploy_to_remote_server.sh`.
+6.  **Configuration:** Set up your `.env` file for credentials and review component-specific configurations (e.g., `params.json`, `config.yaml`).
 
 ## Project Structure & Modules
 
@@ -94,7 +94,7 @@ The project is primarily organized within the `photopack/` directory:
 
 ## Configuration Overview
 
-* **`.env` file (Project Root):** Essential for SSH credentials (Pi & Remote Server). **CRITICAL: Add to `.gitignore`!**
+* **`.env` file (Project Root):** Essential for SSH credentials (Pi & Remote Server).
 * **`params.json` (Main System):** GUI settings, capture parameters.
 * **`config.yaml` (Remote Server):** COLMAP pipeline settings.
 * **`scale_values.json` & `metrics_config.json` (Point Cloud Analysis):** Scaling factors and CSV output definitions.
