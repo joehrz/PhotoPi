@@ -1,6 +1,6 @@
 # PhotoPi: Main System (Control & GUI)
 
-This directory contains the source code for the main control system of PhotoPi, which runs on a user's primary computer (Control PC). It provides a Graphical User Interface (GUI) for managing the image acquisition process, controlling the Raspberry Pi, and handling captured data.
+This directory contains the source code for the main control system of PhotoPi, which runs on a user's primary computer. It provides a Graphical User Interface (GUI) for managing the image acquisition process, controlling the Raspberry Pi, and handling captured data.
 
 For a general overview of the entire PhotoPi project, please see the [main README.md](../../README.md).
 
