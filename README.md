@@ -1,29 +1,45 @@
-# PhotoPi
+# PhotoPi: Automated 3D Plant Phenotyping System
 
-**PhotoPi** is a Python-based GUI application designed for 3D plant phenotyping using photogrammetry. It automates the capture of 2D images to construct 3D models of plants. The system controls multiple cameras and a turntable via a Raspberry Pi, ensuring precise management of the imaging process. Operated remotely from a main computer, PhotoPi integrates into photogrammetry workflows and offers robust tools for point cloud analysis.
+**PhotoPi** is a Python-based system designed for automated 3D plant phenotyping. It integrates a multi-camera setup and a turntable controlled by a Raspberry Pi for systematic image acquisition. These images are then processed (optionally on a remote server using COLMAP) to reconstruct 3D point cloud models of plants, which can be further analyzed to extract quantitative phenotypic traits.
+
+## Overview
+
+PhotoPi streamlines the complex process of 3D plant model generation and analysis. It provides a cost-effective and automated alternative to manual phenotyping, enabling researchers to capture detailed structural data of plants for various studies in agriculture, botany, and plant breeding.
+
+This document provides a high-level overview. For more detailed information on specific components, please see:
+
+* **[Main System (Control & GUI) README](photopack/main_system/README.md)**
+* **[Raspberry Pi System README](photopack/raspberry_pi/README.md)**
+* **[Remote Server (3D Reconstruction) README](photopack/remote_server/README.md)**
+* **[Point Cloud Analysis Toolkit README](photopack/point_cloud_analysis/README.md)**
+
+## Core Features
+
+* **Automated Image Capture:** GUI-driven control of cameras and turntable.
+* **Distributed Processing:** Optional 3D reconstruction on a dedicated remote server.
+* **Modular Point Cloud Analysis:** Tools for extracting traits like height, volume, and leaf angles.
+* **Configurable Setup:** Adaptable parameters for diverse experimental needs.
+
+## System Architecture
+
+PhotoPi comprises four main interacting parts:
+1.  **Main System (Control PC):** User interface and overall workflow orchestration.
+2.  **Raspberry Pi:** Hardware interface for cameras and turntable.
+3.  **Remote Server:** (Optional) For computationally intensive 3D reconstruction.
+4.  **Point Cloud Analysis Toolkit:** For extracting metrics from 3D models.
+
+## Hardware Overview
+
+A general list of required hardware includes:
+* Control PC (Windows, macOS, or Linux)
+* Raspberry Pi (e.g., Model 4B)
+* Multi-camera setup (e.g., Arducam 64MP Quad-Camera Kit)
+* Motorized Turntable & Stepper Motor HAT
+* Featureless Background & Lighting
+* (Optional) Remote Server for processing.
 
 
-## Features
-
-- **Dynamic SSH Connection Management:** Connect and disconnect from the Raspberry Pi systems over SSH.
-- **User Authentication and Network Configuration:** Simple GUI-based authentication with support for configuring network settings.
-- **Live Camera Control and Image Capture:** Directly control multiple cameras, capture images, and manage storage locations.
-- **Configurable Settings:** Customize camera angles, image capture timings, and other settings to fit various use cases.
-- **Inspection and Management:** View and manage captured images directly through the GUI.
-- **Reset Function:** Quickly reset the system in case of failures.
-- **Remote Photogrammetry Processing:** Send captured images to a remote server to perform Structure from Motion (SFM) photogrammetry and reconstruct 3D models.
-- **Point Cloud Analysis Tools:** Analyze 3D models of plants using point cloud processing techniques, including convex hull computation, height/radius analysis, leaf angle measurement.
-
-## Architecture
-
-PhotoPi consists of several interconnected components:
-
-1. **Main System:** Runs the GUI application on a primary computer, managing SSH connections, camera settings, and image transfers.
-2. **Raspberry Pi:** Controls the cameras and turntable, handles image capture, and stores images locally.
-3. **Remote Server:** Facilitates deployment, management, and integration of PhotoPi into larger photogrammetry workflows.
-4. **Point Cloud Analysis:** Provides tools for processing and analyzing 3D models generated from captured images.
-
-## Hardware
+## Hardware List
 
 The following table provides a breakdown of the main components and associated costs for the photogrammetry rig setup:
 
@@ -42,236 +58,46 @@ The following table provides a breakdown of the main components and associated c
 <p><img src="docs/images/pi_stepp_schem.svg" alt="Schematic of the modified wiring required to drive the the turntable stepper motor via the RPi and Adafruit DC & Stepper Motor HAT."></p>
 <p><em>Schematic of the modified wiring required to drive the the turntable stepper motor.</em></p>
 
+## Software Prerequisites
 
-## Requirements
+* Python 3.x
+* COLMAP (for remote server reconstruction)
+* Specific Python package dependencies (see `setup.py` and component READMEs).
 
-### Main System
+## Quick Start & Installation
 
-- **Operating System:** Windows, macOS, or Linux
-- **Python:** 3.x
+1.  **Clone:** `git clone https://github.com/joehrz/PhotoPi.git && cd PhotoPi`
+2.  **Environment:** `python -m venv venv && source venv/bin/activate` (or `venv\Scripts\activate` on Windows)
+3.  **Install:** `pip install -e .[all]` (for all components)
+    * For component-specific installation, see `setup.py` options and linked READMEs.
+4.  **Raspberry Pi Setup:** Run `./deploy_to_pi.sh`. See [Raspberry Pi README](photopack/raspberry_pi/README.md) for details.
+5.  **Remote Server Setup:** Run `./deploy_to_remote_server.sh`. See [Remote Server README](photopack/remote_server/README.md) for details.
+6.  **Configuration:** Set up your `.env` file for credentials and review component-specific configurations (e.g., `params.json`, `config.yaml`). See [Configuration Overview](#configuration-overview) below and linked READMEs.
 
-- **Python Packages:**
-  - `pillow==10.4.0`
-  - `paramiko==3.1.0`
+## Project Structure & Modules
 
-### Raspberry Pi
+The project is primarily organized within the `photopack/` directory:
+* **`photopack/main_system/`**: GUI and control logic for the main PC. ([Details](photopack/main_system/README.md))
+* **`photopack/raspberry_pi/`**: Scripts for Raspberry Pi hardware control. ([Details](photopack/raspberry_pi/README.md))
+* **`photopack/remote_server/`**: 3D reconstruction pipeline. ([Details](photopack/remote_server/README.md))
+* **`photopack/point_cloud_analysis/`**: Tools for analyzing 3D models. ([Details](photopack/point_cloud_analysis/README.md))
+* Top-level scripts like `deploy_to_pi.sh` and `deploy_to_remote_server.sh` assist with setup.
 
-- **Hardware:**
-  - Raspberry Pi (recommended: Pi 4)
-  - 64MP Autofocus Synchronized Quad-Camera Kit for Raspberry Pi
-  - Turntable
-- **Software:**
-  - Raspberry Pi OS (latest version)
-  - Python 3.x
+## Basic Usage Workflow
 
-- **Python Packages:**
-  - `RPi.GPIO`
-  - `adafruit-circuitpython-motorkit`
-  - `adafruit-circuitpython-motor`
+1.  **Launch GUI:** Start the Main System GUI (`photopack-main`).
+2.  **Configure & Capture:** Set parameters and initiate image capture.
+3.  **Reconstruct:** Transfer images to the remote server and run the `build.py` pipeline.
+4.  **Analyze:** Use `photopack-analyze` tools on the generated point cloud.
 
-### Remote Server
+*For detailed operational steps, consult the README file of the respective component linked above.*
 
-- **Hardware:**
-  - A server machine with sufficient resources to handle 3D reconstruction
-- **Software:**
-  - Python 3.x
-  - [COLMAP](https://colmap.github.io/) installed and accessible via PATH
+## Configuration Overview
 
-- **Python Packages:**
-  - `opencv-python`
-  - `pyyaml`
-  - `tqdm`
-
-### Point Cloud Analysis
-
-- **Python Packages:**
-  - `numpy`
-  - `open3d`
-  - `matplotlib`
-  - `scipy`
-  - `scikit-learn`
-  - `networkx`
-  - `alphashape`
-  - `shapely`
-
-
-## Installation
-
-### Main System Installation
-
-1. **Clone the Repository:**
-
-    ```bash
-    git clone https://github.com/joehrz/PhotoPi.git
-    cd PhotoPi
-    ```
-
-2. **Create a Virtual Environment (Optional but Recommended):**
-
-    ```bash
-    python -m venv venv
-    source venv/bin/activate  # On Windows use `venv\Scripts\activate`
-    ```
-
-
-3. **Install Additional Components:**
-
-    To install all components (main system, remote server, Raspberry Pi, and point cloud analysis), use:
-
-    ```bash
-    pip install -e .[all]
-    ```
-
-    For example, installing specific components:
-
-    - **Remote Server:**
-
-        ```bash
-        pip install -e .[remote_server]
-        ```
-### Raspberry Pi Installation
-
-1. **Ensure your Raspberry Pi is up to date:**
-
-    ```bash
-    sudo apt-get update
-    sudo apt-get upgrade
-    ```
-
-2. **Set up the 64MP Autofocus Synchronized Quad-Camera Kit:**
-
-    You can set up the camera kit manually or use the `deploy_to_pi.sh` script to automate the process.
-
-    #### Manual Setup:
-
-    Run the following commands on your Raspberry Pi:
-
-    ```bash
-    wget -O install_pivariety_pkgs.sh https://github.com/ArduCAM/Arducam-Pivariety-V4L2-Driver/releases/download/install_script/install_pivariety_pkgs.sh
-    chmod +x install_pivariety_pkgs.sh
-
-    # Install libcamera dev and apps
-    ./install_pivariety_pkgs.sh -p libcamera_dev
-    ./install_pivariety_pkgs.sh -p libcamera_apps
-
-    # Install the Hawk-Eye kernel driver
-    ./install_pivariety_pkgs.sh -p 64mp_pi_hawk_eye_kernel_driver
-    ```
-
-    Then, edit the `/boot/config.txt` file and add the following line under the `[pi4]` section:
-
-    ```bash
-    dtoverlay=vc4-kms-v3d,cma-512
-    ```
-
-    #### Automated Setup:
-
-    Run the `deploy_to_pi.sh` script, which will handle the setup and deploy the code to the Raspberry Pi:
-
-    ```bash
-    ./deploy_to_pi.sh
-    ```
-
-    This script will automatically set up the necessary drivers, configure the system, and deploy the project files.
-
-## Usage
-
-### Launching the Application
-
-1. **Ensure Your Raspberry Pi is Connected and Set Up:**
-   - Power on the Raspberry Pi.
-   - Verify that all cameras and the turntable are properly connected.
-
-2. **Run the GUI Application on the Main System:**
-
-    ```bash
-    python photopack/main_system/gui.py
-    ```
-
-    Alternatively, if you installed the package with entry points:
-
-    ```bash
-    photopack-main
-    ```
-
-### Main System Operations
-
-Using the GUI, you can:
-
-- **Configure Camera Settings:** Adjust angles and image capture parameters.
-- **Capture Images:** Initiate image capture sequences.
-- **Inspect and Manage Images:** View captured images and organize them as needed.
-- **Transfer Images:** Download images from the Raspberry Pi to your local system or remote server for further processing.
-
-
-### Remote Server Operations
-
-The Remote Server component is responsible for running Structure from Motion (SfM) photogrammetry using COLMAP to reconstruct 3D models from images captured by the Raspberry Pi.
-
-1. **Deploy to Remote Server:**
-
-    ```bash
-    ./deploy_to_remote_server.sh
-    ```
-
-    Alternatively, if installed via entry points:
-
-    ```bash
-    photopack-remote-server
-    ```
-
-2. **Features:**
-   - **Photogrammetry Processing:** Images taken from the Raspberry Pi system is process using COLMAP to generate 3D models (point clouds).
-   - **Automated Workflow:** Streamlines the process of image, processing, and 3D model generation.
-   - **Integration:** Integrates the photogrammetry results into existing workflows, enabling further analysis and visualization.
-
-3. **Usage:**
-   - Ensure that the remote server has COLMAP installed and accessible via the system PATH.
-   - Configure the remote server settings in the `params.json` file.
-   - Run the remote server script to start processing images and 3D reconstruct point clouds with COLMAP.
-
-
-### Point Cloud Analysis
-
-PhotoPi includes tools for analyzing 3D models generated from captured images.
-
-1. **Run Point Cloud Analysis:**
-
-    ```bash
-    photopack-analyze <path_to_point_cloud_file> [options]
-    ```
-
-    For example:
-
-    ```bash
-    photopack-analyze models/plant_model.ply --diameter 1.5 --module convex_hull leaf_angles
-    ```
-
-2. **Available Modules:**
-
-    - **processing:** General point cloud processing.
-    - **convex_hull:** Computes the convex hull volume of the plant model.
-    - **hr_analysis:** Performs height/radius analysis.
-    - **leaf_angles:** Measures leaf angles.
-    - **projection:** Analyzes projections and areas.
-    - **all:** Runs all available modules.
-
-3. **Example Usage:**
-
-    ```bash
-    python -m photopack.point_cloud_analysis.main models/plant_model.ply --module all
-    ```
-
-    This command will run all analysis modules on the specified point cloud file.
-
-
-### Raspberry Pi
-
-To control and capture images directly from the Raspberry Pi (optional, depending on your setup), use the provided scripts in the `raspberry_pi/` directory.
-
-## Configuration
-
-Configuration settings are managed through the params.json file located in the photopack/main_system/ directory. You can modify this file directly or use the GUI to adjust settings.
+* **`.env` file (Project Root):** Essential for SSH credentials (Pi & Remote Server). **CRITICAL: Add to `.gitignore`!**
+* **`params.json` (Main System):** GUI settings, capture parameters.
+* **`config.yaml` (Remote Server):** COLMAP pipeline settings.
+* **`scale_values.json` & `metrics_config.json` (Point Cloud Analysis):** Scaling factors and CSV output definitions.
 
 
 
