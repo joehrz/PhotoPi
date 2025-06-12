@@ -89,6 +89,7 @@ The recommended method for setting up the Raspberry Pi and deploying the necessa
 ```bash
 # Execute this from your Control PC, in the PhotoPi project root directory:
 ./deploy_to_pi.sh
+```
 
 ## Operation
 
