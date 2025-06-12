@@ -8,12 +8,16 @@ For a general overview of the entire PhotoPi project, please see the [main READM
 
 * [Overview](#overview)
 * [Hardware Requirements & Setup](#hardware-requirements--setup)
+    * [Camera Hardware Setup](#camera-hardware-setup)
 * [Software and Dependencies](#software-and-dependencies)
+    * [Camera Driver Installation](#camera-driver-installation)
 * [Deployment](#deployment)
 * [Operation](#operation)
+    * [Camera Operation](#camera-operation)
 * [Key Scripts](#key-scripts)
     * [`turntable.py`](#turntablepy)
 * [Troubleshooting](#troubleshooting)
+    * [Camera Safety Precautions](#camera-safety-precautions)
 
 ## Overview
 
@@ -22,28 +26,65 @@ The Raspberry Pi acts as the embedded control unit for the PhotoPi image acquisi
 ## Hardware Requirements & Setup
 
 * **Raspberry Pi:** Raspberry Pi 4 Model B is recommended.
-* **Cameras:** Arducam 64MP Autofocus Quad-Camera Kit (or a compatible multi-camera setup).
+* **Cameras:** Arducam 64MP Autofocus Quad-Camera Kit. [cite_start]The kit includes:
+    * [cite_start]4 x 64MP Autofocus Camera Modules 
+    * [cite_start]1 x Quad-Camera HAT 
+    * [cite_start]Flex cables, screws, spacers, and nuts 
 * **Motor Controller:** Adafruit Stepper Motor HAT (or a similar board compatible with `adafruit_motorkit`).
 * **Stepper Motor & Turntable:** A stepper motor connected to the Motor HAT, driving a physical turntable.
 * **Power:** Adequate power supply for the Raspberry Pi and the Motor HAT (stepper motors can draw significant current).
 * **Network:** Ethernet or WiFi connection.
 
-**Wiring:** Refer to the main project [Wiring Diagram](../../README.md#wiring-diagram) for crucial connections between the Raspberry Pi, Motor HAT, and stepper motor. Camera connections are typically made to the MIPI CSI ports.
+**Wiring:** Refer to the main project [Wiring Diagram](../../README.md#wiring-diagram) for crucial connections between the Raspberry Pi, Motor HAT, and stepper motor. Camera connections are detailed below.
+
+### Camera Hardware Setup
+
+[cite_start]**Important:** The 64MP camera modules in the kit must be used with the included Quad-Camera HAT and cannot be connected directly to the Raspberry Pi.
+
+1.  [cite_start]**Power Down:** Always turn off your Raspberry Pi and disconnect the power supply before connecting any components.
+2.  [cite_start]**Attach HAT to Pi:** Connect the Quad-Camera HAT's `MIPI_TXO` port to the Raspberry Pi's camera port (MIPI CSI-2) using the provided flex cable. [cite_start]Secure the HAT to the Raspberry Pi board using the included screws and spacers.
+3.  [cite_start]**Connect Cameras to HAT:** Connect the four camera modules to the `Rx` ports on the Quad-Camera HAT using the smaller flex cables. [cite_start]Ensure the cables are securely locked in place.
+4.  [cite_start]**Power Up:** Once all hardware is securely connected, you can power your Raspberry Pi on.
 
 ## Software and Dependencies
 
-* **OS:** Raspberry Pi OS (latest version recommended, based on Debian Bullseye or newer for `libcamera`).
+* [cite_start]**OS:** A recent version of Raspberry Pi OS is required (releases from 01/28/22 or later). [cite_start]A fresh installation is highly recommended.
 * **Python:** Python 3.x.
-* **Camera Stack:** `libcamera-apps` and Arducam Pivariety drivers. These are typically installed using the `deploy_to_pi.sh` script or Arducam's official installation scripts.
+* **Camera Stack:** `libcamera-apps` and Arducam Pivariety drivers are required. See the installation steps below.
 * **Python Packages:**
     * `RPi.GPIO` (for general GPIO interaction, though `adafruit_motorkit` handles motor pins).
     * `adafruit-circuitpython-motorkit`
     * `adafruit-circuitpython-motor`
     These should be installed on the Raspberry Pi.
 
+### Camera Driver Installation
+
+After setting up the hardware and installing a fresh Raspberry Pi OS, you must install the necessary drivers and configure the system.
+
+1.  [cite_start]**Download Installation Script**:
+    ```bash
+    wget -O install_pivariety_pkgs.sh [https://github.com/ArduCAM/Arducam-Pivariety-V4L2-Driver/releases/download/install_script/install_pivariety_pkgs.sh](https://github.com/ArduCAM/Arducam-Pivariety-V4L2-Driver/releases/download/install_script/install_pivariety_pkgs.sh)
+    chmod +x install_pivariety_pkgs.sh
+    ```
+2.  [cite_start]**Install `libcamera`**:
+    ```bash
+    ./install_pivariety_pkgs.sh -p libcamera_dev
+    ./install_pivariety_pkgs.sh -p libcamera_apps
+    ```
+3.  **Install Kernel Driver**:
+    ```bash
+    ./install_pivariety_pkgs.sh -p 64mp_pi_hawk_eye_kernel_driver
+    ```
+4.  **Update Boot Configuration**:
+    Open the `/boot/config.txt` file and add the following line under the `[all]` section to increase the memory available to the camera system:
+    ```
+    dtoverlay=vc4-kms-v3d,cma-512
+    ```
+5.  **Reboot** your Raspberry Pi to apply the changes.
+
 ## Deployment
 
-The recommended method for setting up the Raspberry Pi and deploying the necessary PhotoPi scripts is by using the `deploy_to_pi.sh` script located in the root of the PhotoPi repository.
+The recommended method for setting up the Raspberry Pi and deploying the necessary PhotoPi scripts is by using the `deploy_to_pi.sh` script located in the root of the PhotoPi repository. This script automates the transfer of your project files.
 
 ```bash
 # Execute this from your Control PC, in the PhotoPi project root directory:
