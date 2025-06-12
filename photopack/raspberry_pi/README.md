@@ -89,3 +89,50 @@ The recommended method for setting up the Raspberry Pi and deploying the necessa
 ```bash
 # Execute this from your Control PC, in the PhotoPi project root directory:
 ./deploy_to_pi.sh
+
+## Operation
+
+By default, the quad-camera kit works in a synchronized 4-channel mode, and the Raspberry Pi recognizes the whole kit as one camera. Any manual focus or camera control adjustments (exposure/gain/white balance/etc.) will also be applied to all 4 cameras at the same time.
+
+### Camera Operation
+
+* **List Available Cameras**:
+    ```bash
+    libcamera-still --list-cameras
+    ```
+
+* **Preview Camera Feed**:
+    For a balance of quality and performance, a preview resolution of 2312x1736 is recommended.
+    ```bash
+    libcamera-still -t 0 --viewfinder-width 2312 --viewfinder-height 1736
+    ```
+
+* **Capture an Image with Autofocus**:
+    ```bash
+    # For Raspberry Pi 4
+    libcamera-still -t 5000 --viewfinder-width 2312 --viewfinder-height 1736 -o pi_hawk_eye.jpg --autofocus
+    ```
+
+* **Manual Focus Control**:
+    * Clone the driver repository and navigate to the focus directory:
+        ```bash
+        git clone [https://github.com/ArduCAM/Arducam-Pivariety-V4L2-Driver.git](https://github.com/ArduCAM/Arducam-Pivariety-V4L2-Driver.git)
+        cd Arducam-Pivariety-V4L2-Driver/focus
+        ```
+    * Run the focuser script:
+        ```bash
+        python3 FocuserExample.py -d /dev/v4l-subdev1
+        ```
+    * Press the Up/Down Arrow for focus adjustment, press "ctrl + c" to save, or "r" to reset. You can change the step size with the `--focus-step [number]` argument. The default step is 50, and the range is 1-1023.
+
+* **Switching Camera Channels**:
+    You can switch between single, dual, or the default four-channel modes using `i2cset` commands.
+    ```bash
+    # Revert to default four-in-one mode
+    i2cset -y 10 0x24 0x24 0x00
+    ```
+## Key Scripts
+
+#### `turntable.py`
+
+This script controls the stepper motor via the Adafruit Motor HAT to rotate the turntable.
