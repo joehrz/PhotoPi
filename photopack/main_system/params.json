@@ -1,13 +1,13 @@
 {
     "camera_a": 1,
     "camera_b": 1,
-    "angle": "60",
-    "seconds": "4",
-    "plant_name": "test_7_",
-    "folder_path": "/Users/Evelyn/Desktop/PhotoPi_Vr2/images",
-    "pi_hostname": "10.205.10.59",
-    "camera_c": 1,
-    "camera_d": 1,
-    "timestamp": "test_7_2024-08-12-1648",
-    "folder_with_date": "/Users/Evelyn/Desktop/PhotoPi_Vr2/images/test_7_2024-08-12-1648"
+    "angle": "90",
+    "seconds": "1",
+    "plant_name": "test9",
+    "folder_path": "/Users/Evelyn/Desktop",
+    "pi_hostname": "pi.local",
+    "camera_c": 0,
+    "camera_d": 0,
+    "timestamp": "test92025-06-13-1405",
+    "folder_with_date": "/Users/Evelyn/Desktop/test92025-06-13-1405"
 }

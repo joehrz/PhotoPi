@@ -11,6 +11,7 @@ import threading
 from tkinter import messagebox
 import os
 from dotenv import load_dotenv
+from pathlib import Path 
 
 from imagecapture import CameraSystem
 from credentials import NetworkConfig
@@ -44,6 +45,7 @@ class InputGUI:
         # Load credentials from environment variables
         self.pi_username = os.getenv('PI_USERNAME')
         self.pi_password = os.getenv('PI_PASSWORD')
+
 
         if self.initialize_network_and_ssh():
             self.setup_gui_components()
@@ -233,12 +235,34 @@ class InputGUI:
             'folder_path': self.folder_path_entry.get().strip()  # Strip whitespace
         }
 
+
+
+    # def update_configuration(self, inputs):
+    #     """Updates the configuration based on input values."""
+    #     timestamp = datetime.now().strftime('%Y-%m-%d-%H%M')
+    #     inputs['timestamp'] = inputs['plant_name'] + timestamp
+    #     inputs['folder_with_date'] = f"{inputs['folder_path']}/{inputs['timestamp']}"
+
+
+
+
+    #     for key, value in inputs.items():
+    #         self.config.set_value(key, value)
+    #     self.config.save_config()
+
+
     def update_configuration(self, inputs):
         """Updates the configuration based on input values."""
-        timestamp = datetime.now().strftime('%Y-%m-%d-%H%M')
-        inputs['timestamp'] = inputs['plant_name'] + timestamp
-        inputs['folder_with_date'] = f"{inputs['folder_path']}/{inputs['timestamp']}"
+        # 1) Build the timestamp and full key
+        ts = datetime.now().strftime('%Y-%m-%d-%H%M')
+        full_ts = f"{inputs['plant_name']}{ts}"
+        inputs['timestamp'] = full_ts
 
+        # 2) Join the folder path without pathlib
+        folder_with_date = os.path.join(inputs['folder_path'], full_ts)
+        inputs['folder_with_date'] = folder_with_date
+
+        # 3) Persist to your Config
         for key, value in inputs.items():
             self.config.set_value(key, value)
         self.config.save_config()
@@ -247,7 +271,7 @@ class InputGUI:
         """Transfers the configuration file to the Raspberry Pi."""
         try:
             self.network_manager.connect()
-            self.network_manager.transfer_file('params.json', '/home/pi/params.json')
+            self.network_manager.transfer_file('params.json', '/home/photopi/params.json')
             print("Success", "Configuration transferred successfully.")
         except Exception as e:
             print("Error", f"Failed to transfer configuration: {e}")
@@ -312,7 +336,7 @@ class InputGUI:
 
     def start_imaging(self):
         """
-        Starts a background task to create and use the CameraSystem instance for imaging.
+        Starts a background task to create and use the CameraSystem instance for imaging.f
         """
         self.disable_buttons()
         def task():
@@ -377,3 +401,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

@@ -4,6 +4,7 @@ import tkinter as tk
 from tkinter import messagebox
 import socket
 import logging
+import os
 
 
 # Create a module-specific logger
@@ -67,9 +68,9 @@ class NetworkConfig:
             root (tk.Tk): The root window of the Tkinter application.
         """
         self.root = root
-        self.username = None
-        self.password = None
-        self.hostname = None
+        self.hostname = os.getenv('PI_HOST', 'raspberrypi.local') # Load from .env, with a default
+        self.username = os.getenv('PI_USERNAME')
+        self.password = os.getenv('PI_PASSWORD')
 
     def prompt_credentials(self):
         """
@@ -87,12 +88,19 @@ class NetworkConfig:
         Discovers the hostname of the Raspberry Pi on the local network.
         """
         try:
-            self.hostname = socket.gethostbyname('raspberrypi.local')
-            messagebox.showinfo("Network Info", f"Raspberry Pi found at IP: {self.hostname}", parent=self.root)
-            logger.info(f"Raspberry Pi found at IP: {self.hostname}")
+            ip_address = socket.gethostbyname(self.hostname)
+            logger.info(f"Successfully resolved {self.hostname} to {ip_address}")
+            return ip_address
         except socket.error:
-            messagebox.showerror("Network Error", "Failed to locate Raspberry Pi on the network.", parent=self.root)
-            logger.error("Failed to locate Raspberry Pi on the network.")
+            logger.error(f"Failed to locate {self.hostname} on the network.")
+            return None
+        # try:
+        #     self.hostname = socket.gethostbyname('pi.local')
+        #     messagebox.showinfo("Network Info", f"Raspberry Pi found at IP: {self.hostname}", parent=self.root)
+        #     logger.info(f"Raspberry Pi found at IP: {self.hostname}")
+        # except socket.error:
+        #     messagebox.showerror("Network Error", "Failed to locate Raspberry Pi on the network.", parent=self.root)
+        #     logger.error("Failed to locate Raspberry Pi on the network.")
 
     def get_credentials(self):
         """
