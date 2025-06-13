@@ -15,6 +15,7 @@ from PIL import Image, ImageTk
 import tkinter as tk
 from dotenv import load_dotenv
 import time
+import posixpath
 
 # Load environment variables from a .env file for easy configuration.
 load_dotenv()
@@ -79,26 +80,61 @@ class SSHClientWrapper:
             logging.error(f"SSH command execution failed: {e}")
             return ""
 
+
     def transfer_files(self, remote_path, local_path):
         """
-        Transfers all files from a remote directory to a local directory using SFTP.
-
-        Args:
-            remote_path (str): The source directory on the remote machine.
-            local_path (str): The destination directory on the local machine.
+        Pulls all .jpg/.jpeg/.png from remote_path on the Pi into local_path on the PC.
+        Uses POSIX join for remote and os.path for local.
         """
         try:
-            sftp_client = self.ssh_client.open_sftp()
+            logging.info(f"Transfer start: Pi “{remote_path}” → PC “{local_path}”")
+            # Ensure the local folder exists
             os.makedirs(local_path, exist_ok=True)
-            file_list = sftp_client.listdir(remote_path)
-            for file_name in file_list:
-                remote_file = os.path.join(remote_path, file_name)
-                local_file = os.path.join(local_path, file_name)
-                sftp_client.get(remote_file, local_file)
-            sftp_client.close()
-            logging.info(f"Files transferred from {remote_path} to {local_path}")
+
+            sftp = self.ssh_client.open_sftp()
+
+            # List and log what’s on the Pi
+            file_list = sftp.listdir(remote_path)
+            logging.info(f"Found {len(file_list)} files on Pi side: {file_list}")
+
+            for fname in file_list:
+                if not fname.lower().endswith(('.jpg', '.jpeg', '.png')):
+                    continue
+
+                pi_file = posixpath.join(remote_path, fname)
+                pc_file = os.path.join(local_path, fname)
+                logging.info(f"⤷ pulling {pi_file} → {pc_file}")
+                sftp.get(pi_file, pc_file)
+
+            sftp.close()
+            logging.info("Transfer complete")
         except Exception as e:
-            logging.error(f"File transfer from {remote_path} failed: {e}")
+            logging.error(f"File transfer failed: {e}", exc_info=True)
+
+
+
+    # def transfer_files(self, remote_path, local_path):
+    #     """
+    #     Transfers all files from a remote directory to a local directory using SFTP.
+
+    #     Args:
+    #         remote_path (str): The source directory on the remote machine.
+    #         local_path (str): The destination directory on the local machine.
+    #     """
+    #     try:
+    #         sftp_client = self.ssh_client.open_sftp()
+    #         os.makedirs(local_path, exist_ok=True)
+    #         file_list = sftp_client.listdir(remote_path)
+
+    #         for file_name in file_list:
+    #             remote_file = os.path.join(remote_path, file_name)
+    #             local_file = os.path.join(local_path, file_name)
+    #             sftp_client.get(remote_file, local_file)
+    #         sftp_client.close()
+            
+    #         logging.info(f"Files transferred from {remote_path} to {local_path}")
+    #     except Exception as e:
+    #         logging.error(f"File transfer from {remote_path} failed: {e}")
 
 class CameraSystem:
     """Manages all camera and turntable operations on the Raspberry Pi."""
@@ -182,7 +218,7 @@ class CameraSystem:
         remote_image_destination = os.path.join(self.pi_project_dir, 'Images', plant_folder, image_folder)
 
         command = (
-            f'i2cset -y 10 0x24 0x24 {self.get_camera_code(camera_id)}; '
+            f'sudo i2cset -y 10 0x24 0x24 {self.get_camera_code(camera_id)}; \n'
             f'libcamera-jpeg --sharpness 2.0 -t 5000 --viewfinder-width 2312 '
             f'--viewfinder-height 1736 --width 4056 --height 3040 --roi 0.25,0.25,0.45,0.45 '
             f'--vflip '
@@ -207,24 +243,60 @@ class CameraSystem:
         self.images.sort(key=lambda x: self.camera_labels.get(x[1], "Unknown"))
         self.create_image_window()
 
+
     def fetch_images(self, image_directory):
-        """Fetches raw image data from a specified directory on the Pi using SFTP."""
         raw_images = []
         sftp_client = None
         try:
+            logging.info(f"Attempting to list PI directory: {image_directory!r}")
             sftp_client = self.ssh_client.ssh_client.open_sftp()
+
             file_list = sftp_client.listdir(image_directory)
+            logging.info(f"Files found on Pi: {file_list}")
+
             for file_name in file_list:
-                if file_name.lower().endswith(('.png', '.jpg', '.jpeg')):
-                    file_path = os.path.join(image_directory, file_name)
-                    with sftp_client.open(file_path, 'rb') as file_handle:
-                        raw_images.append((file_handle.read(), file_name))
+                if not file_name.lower().endswith(('.png', '.jpg', '.jpeg')):
+                    continue
+
+                # Correct POSIX join on the Pi side
+                remote_path = posixpath.join(image_directory, file_name)
+                try:
+                    with sftp_client.open(remote_path, 'rb') as file_handle:
+                        data = file_handle.read()
+                        raw_images.append((data, file_name))
+                        logging.info(f"Fetched {file_name} ({len(data)} bytes)")
+                except IOError as e:
+                    logging.error(f"Failed to open remote file {remote_path}: {e}")
+
         except Exception as e:
-            logging.error(f"An error occurred while fetching images from {image_directory}: {e}")
+            logging.error(f"Could not list directory {image_directory!r}: {e}")
         finally:
-            if sftp_client and not sftp_client.sock.closed:
+            if sftp_client:
                 sftp_client.close()
+
         return raw_images
+
+
+
+
+    # def fetch_images(self, image_directory):
+    #     """Fetches raw image data from a specified directory on the Pi using SFTP."""
+    #     raw_images = []
+    #     sftp_client = None
+    #     try:
+    #         sftp_client = self.ssh_client.ssh_client.open_sftp()
+    #         file_list = sftp_client.listdir(image_directory)
+    #         for file_name in file_list:
+    #             if file_name.lower().endswith(('.png', '.jpg', '.jpeg')):
+    #                 file_path = os.path.join(image_directory, file_name)
+    #                 with sftp_client.open(file_path, 'rb') as file_handle:
+    #                     raw_images.append((file_handle.read(), file_name))
+    #     except Exception as e:
+    #         logging.error(f"An error occurred while fetching images from {image_directory}: {e}")
+    #     finally:
+    #         if sftp_client and not sftp_client.sock.closed:
+    #             sftp_client.close()
+    #     return raw_images
 
     def resize_image(self, image_data):
         """Resizes an image to a thumbnail for display in the GUI."""

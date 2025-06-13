@@ -1,13 +1,13 @@
 {
     "camera_a": 1,
-    "camera_b": 1,
+    "camera_b": 0,
     "angle": "90",
     "seconds": "1",
-    "plant_name": "test9",
+    "plant_name": "test13",
     "folder_path": "/Users/Evelyn/Desktop",
     "pi_hostname": "pi.local",
     "camera_c": 0,
-    "camera_d": 0,
-    "timestamp": "test92025-06-13-1405",
-    "folder_with_date": "/Users/Evelyn/Desktop/test92025-06-13-1405"
+    "camera_d": 1,
+    "timestamp": "test132025-06-13-1450",
+    "folder_with_date": "/Users/Evelyn/Desktop/test132025-06-13-1450"
 }
