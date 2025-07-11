@@ -274,11 +274,25 @@ class ConfigValidator:
     @staticmethod
     def create_default_main_config() -> Dict[str, Any]:
         """Create a default main system configuration."""
+        import platform
+        import tempfile
+        
+        # Create platform-appropriate default folder path
+        if platform.system() == "Windows":
+            # Use user's temp directory on Windows
+            default_folder = os.path.join(tempfile.gettempdir(), "photopi_images")
+        else:
+            # Use /tmp on Unix-like systems
+            default_folder = "/tmp/photopi_images"
+        
+        # Ensure the default folder exists
+        os.makedirs(default_folder, exist_ok=True)
+        
         return {
             "plant_name": "sample_plant",
             "angle": 30,
             "seconds": 5,
-            "folder_path": "/tmp/photopi_images",
+            "folder_path": default_folder,
             "camera_a": 1,
             "camera_b": 0,
             "camera_c": 0,

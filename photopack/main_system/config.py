@@ -75,6 +75,9 @@ class Config:
         except ValidationError as e:
             logger.error(f"Default configuration validation failed: {e}")
             # This should never happen, but fallback to minimal config
+            import platform
+            import tempfile
+            fallback_folder = tempfile.gettempdir() if platform.system() == "Windows" else "/tmp"
             defaults = {
                 "camera_a": 1,
                 "camera_b": 0, 
@@ -83,7 +86,7 @@ class Config:
                 "angle": 30,
                 "seconds": 5,
                 "plant_name": "Default Plant",
-                "folder_path": "/tmp"
+                "folder_path": fallback_folder
             }
         
         return defaults
