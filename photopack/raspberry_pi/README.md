@@ -55,6 +55,7 @@ The Raspberry Pi acts as the embedded control unit for the PhotoPi image acquisi
     * `RPi.GPIO` (for general GPIO interaction, though `adafruit_motorkit` handles motor pins).
     * `adafruit-circuitpython-motorkit`
     * `adafruit-circuitpython-motor`
+    * Additional dependencies for enhanced error handling and logging
     These should be installed on the Raspberry Pi.
 
 ### Camera Driver Installation
@@ -136,4 +137,39 @@ By default, the quad-camera kit works in a synchronized 4-channel mode, and the 
 
 #### `turntable.py`
 
-This script controls the stepper motor via the Adafruit Motor HAT to rotate the turntable.
+This script controls the stepper motor via the Adafruit Motor HAT to rotate the turntable. Recent enhancements include:
+* Improved error handling and recovery
+* Better logging for debugging
+* Graceful cleanup on exit
+* Configuration validation
+
+#### `constants.py`
+
+New module containing centralized constants for the Raspberry Pi system, improving maintainability and consistency.
+
+## Recent Improvements
+
+* **Enhanced Error Handling:** Better exception handling in turntable control
+* **Constants Module:** Centralized configuration values
+* **Improved Reliability:** More robust motor control with proper cleanup
+
+## Testing
+
+While the Raspberry Pi components are tested as part of the integrated system, you can verify individual components:
+```bash
+# Test turntable motor control
+python -m photopack.raspberry_pi.turntable
+```
+
+## Troubleshooting
+
+* **Motor Not Moving:** Check power supply, wiring connections, and ensure the Motor HAT is properly seated
+* **Camera Not Found:** Verify driver installation and check `libcamera-still --list-cameras`
+* **SSH Connection Issues:** Ensure the Pi is on the network and SSH is enabled
+* **Permission Errors:** Some operations may require sudo privileges
+
+### Camera Safety Precautions
+
+* Always power down before connecting/disconnecting cameras
+* Handle flex cables with care to avoid damage
+* Ensure proper heat dissipation for extended operation
