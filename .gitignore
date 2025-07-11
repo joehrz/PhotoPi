@@ -29,3 +29,13 @@ images
 
 # Ignore env file
 .env
+
+# Ignore text file
+.txt
+
+# Ignore CSV file
+.csv
+
+# ignore .ply file
+point_cloud_data
+.ply
