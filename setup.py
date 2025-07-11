@@ -4,6 +4,8 @@ from setuptools import setup, find_packages
 main_system_deps = [
     'pillow==10.4.0',
     'paramiko==3.1.0',
+    'pydantic>=1.8.0',
+    'python-dotenv',
 ]
 
 remote_server_deps = [
@@ -29,6 +31,22 @@ point_cloud_analysis_deps = [
     'shapely',  
 ]
 
+# Test dependencies
+test_deps = [
+    'pytest>=6.0.0',
+    'pytest-cov',
+    'pytest-mock',
+    'pytest-asyncio',
+]
+
+# Development dependencies
+dev_deps = test_deps + [
+    'black',
+    'flake8',
+    'mypy',
+    'pre-commit',
+]
+
 # Combine all dependencies for the 'all' option
 all_deps = (
     main_system_deps +
@@ -50,6 +68,8 @@ setup(
         'remote_server': remote_server_deps,
         'raspberry_pi': raspberry_pi_deps,
         'point_cloud_analysis': point_cloud_analysis_deps,
+        'test': test_deps,
+        'dev': dev_deps,
         'all': all_deps,  # Allows installation of all components at once
     },
     entry_points={
