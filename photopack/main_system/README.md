@@ -21,46 +21,57 @@ The Main System is the central hub for interacting with the PhotoPi hardware and
 
 ## Core Components
 
-* **`gui.py`**: The main Tkinter-based GUI application allowing users to:
+* **`gui.py`**: The main Tkinter-based GUI application with enhanced error handling allowing users to:
     * Configure imaging parameters (camera selection, plant name, turntable angle, delay).
     * Select a local folder for storing images and configuration.
     * Initiate image capture sequences.
     * Inspect test images from the cameras.
     * Manage SSH connections to the Raspberry Pi.
-* **`imagecapture.py`**: Handles the logic for:
+* **`imagecapture.py`**: Handles the logic with improved error handling for:
     * Sending image capture commands to the Raspberry Pi.
     * Fetching and displaying inspection images.
     * Transferring completed image sets from the Raspberry Pi to the local machine.
 * **`network.py`**: Manages SSH and SFTP connections using Paramiko for communication with the Raspberry Pi.
-* **`config.py`**: Handles loading and saving of session parameters to `params.json`.
+* **`unified_network.py`**: New unified network module with connection pooling, retry logic, and automatic reconnection.
+* **`config.py`**: Handles loading and saving of session parameters to `params.json` with validation.
+* **`config_validation.py`**: Comprehensive JSON schema validation for configuration files.
+* **`security.py`**: New security module with API key management and rate limiting.
+* **`retry_utils.py`**: Utilities for retry logic with exponential backoff.
+* **`constants.py`**: Centralized constants for better maintainability.
 * **`credentials.py`**: Manages network discovery (finding `raspberrypi.local`) and originally included a dialog for credentials (though primary credential management is now via `.env` file).
 * **`params.json`**: A JSON file storing the parameters set through the GUI. This file is also transferred to the Raspberry Pi.
 
 ## Features
 
-* User-friendly GUI for system operation.
-* Dynamic SSH connection management.
+* User-friendly GUI for system operation with enhanced error handling.
+* Dynamic SSH connection management with automatic retry and reconnection.
 * Configuration of multi-camera setups and turntable movement.
 * Live image inspection from selected cameras.
 * Automated image transfer from Raspberry Pi.
-* Saving and loading of session parameters via `params.json`.
+* Saving and loading of session parameters via `params.json` with schema validation.
+* Security features including API key management and rate limiting.
+* Robust network operations with connection pooling and exponential backoff.
+* Comprehensive test suite for reliability.
 
 ## Prerequisites
 
-* Python 3.x
+* Python 3.8+
 * Required Python packages (installed via main project `setup.py` or `pip install -e .[main_system]`):
     * `pillow==10.4.0`
     * `paramiko==3.1.0`
     * `python-dotenv` (for loading `.env` file)
+    * `jsonschema` (for configuration validation)
+    * `pytest` (for running tests)
 * SSH access to the configured Raspberry Pi.
 
 ## Configuration
 
 1.  **`.env` File:**
-    Create a `.env` file in the root directory of the PhotoPi project (one level above `photopack`). This file should contain the SSH credentials for the Raspberry Pi:
+    Create a `.env` file in the root directory of the PhotoPi project (one level above `photopack`). This file should contain the SSH credentials for the Raspberry Pi and optional API keys:
     ```env
     PI_USERNAME=your_pi_username
     PI_PASSWORD=your_pi_password
+    API_KEY=your_optional_api_key
     ```
     **Important:** Add `.env` to your project's `.gitignore` file.
 
@@ -73,6 +84,8 @@ The Main System is the central hub for interacting with the PhotoPi hardware and
     * `folder_path`: Local directory to save images and `params.json`.
     * `pi_hostname`: Detected or manually entered hostname/IP of the Raspberry Pi.
     * `timestamp`, `folder_with_date`: Automatically generated for unique run identification.
+    
+    All configuration values are validated against a JSON schema to ensure correctness.
 
 ## Usage
 
@@ -96,11 +109,20 @@ The Main System is the central hub for interacting with the PhotoPi hardware and
 8.  Click **"Start Imaging"** to begin the automated capture sequence.
 9.  Images will be captured on the Pi and then automatically transferred to your specified local folder.
 
+## Testing
+
+Run the test suite for the main system:
+```bash
+pytest tests/test_config_validation.py tests/test_security.py tests/test_unified_network.py tests/test_retry_utils.py -v
+```
+
 ## Troubleshooting
 
 * **Connection Errors:**
     * Ensure the Raspberry Pi is on the same network and its hostname/IP is correct.
     * Verify `PI_USERNAME` and `PI_PASSWORD` in your `.env` file.
     * Check firewall settings on your Control PC or network.
+    * The system will automatically retry failed connections with exponential backoff.
 * **GUI Freezes:** If the GUI becomes unresponsive during network operations, ensure the task is properly threaded.
 * **`params.json` Not Found/Incorrect:** Ensure you click "Submit" in the GUI to generate/update `params.json` before starting imaging.
+* **Configuration Validation Errors:** Check the error message for specific validation issues with your `params.json` file.
