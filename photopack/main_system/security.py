@@ -37,6 +37,9 @@ class SecureHostKeyPolicy(paramiko.MissingHostKeyPolicy):
         """
         Called when the host key is not found in known_hosts.
         """
+        # Check if auto-accept is enabled
+        auto_accept = os.getenv('PHOTOPI_AUTO_ACCEPT_HOST_KEY', 'false').lower() == 'true'
+        
         if self.known_hosts_exists:
             # If we have a known_hosts file but the key isn't in it, warn the user
             logger.warning(
@@ -44,53 +47,59 @@ class SecureHostKeyPolicy(paramiko.MissingHostKeyPolicy):
                 f"Key fingerprint: {key.get_fingerprint().hex()}"
             )
             
-            # Cross-platform timeout implementation for user input
-            try:
-                import threading
-                import sys
-                from queue import Queue, Empty
-                
-                def get_user_input(prompt, result_queue):
-                    """Get user input in a separate thread."""
-                    try:
-                        response = input(prompt)
-                        result_queue.put(response)
-                    except EOFError:
-                        result_queue.put(None)
-                
-                # Create a queue for the result
-                result_queue = Queue()
-                
-                # Start input thread
-                input_thread = threading.Thread(
-                    target=get_user_input,
-                    args=(f"Do you want to continue connecting to {hostname}? (yes/no): ", result_queue)
-                )
-                input_thread.daemon = True
-                input_thread.start()
-                
-                # Wait for input with timeout (30 seconds)
+            if auto_accept:
+                logger.info(f"Auto-accepting host key for {hostname} due to PHOTOPI_AUTO_ACCEPT_HOST_KEY setting")
+            else:
+                # Cross-platform timeout implementation for user input
                 try:
-                    response = result_queue.get(timeout=30)
-                    if response is None:
-                        raise paramiko.SSHException(f"Host key verification failed for {hostname}")
+                    import threading
+                    import sys
+                    from queue import Queue, Empty
                     
-                    if response.lower() != 'yes':
-                        raise paramiko.SSHException(f"Host key verification failed for {hostname}")
+                    def get_user_input(prompt, result_queue):
+                        """Get user input in a separate thread."""
+                        try:
+                            response = input(prompt)
+                            result_queue.put(response)
+                        except EOFError:
+                            result_queue.put(None)
+                    
+                    # Create a queue for the result
+                    result_queue = Queue()
+                    
+                    # Start input thread
+                    input_thread = threading.Thread(
+                        target=get_user_input,
+                        args=(f"Do you want to continue connecting to {hostname}? (yes/no): ", result_queue)
+                    )
+                    input_thread.daemon = True
+                    input_thread.start()
+                    
+                    # Wait for input with timeout (30 seconds)
+                    try:
+                        response = result_queue.get(timeout=30)
+                        if response is None:
+                            raise paramiko.SSHException(f"Host key verification failed for {hostname}")
                         
-                except Empty:
-                    logger.error(f"Host key verification timeout for {hostname}")
-                    raise paramiko.SSHException(f"Host key verification timeout for {hostname}")
-                    
-            except (KeyboardInterrupt, EOFError):
-                logger.error(f"Host key verification cancelled for {hostname}")
-                raise paramiko.SSHException(f"Host key verification cancelled for {hostname}")
+                        if response.lower() != 'yes':
+                            raise paramiko.SSHException(f"Host key verification failed for {hostname}")
+                            
+                    except Empty:
+                        logger.error(f"Host key verification timeout for {hostname}")
+                        raise paramiko.SSHException(f"Host key verification timeout for {hostname}")
+                        
+                except (KeyboardInterrupt, EOFError):
+                    logger.error(f"Host key verification cancelled for {hostname}")
+                    raise paramiko.SSHException(f"Host key verification cancelled for {hostname}")
         else:
             # No known_hosts file, just warn
-            logger.warning(
-                f"No known_hosts file found. Connecting to '{hostname}' "
-                f"with key fingerprint: {key.get_fingerprint().hex()}"
-            )
+            if auto_accept:
+                logger.info(f"Auto-accepting host key for {hostname} (no known_hosts file)")
+            else:
+                logger.warning(
+                    f"No known_hosts file found. Connecting to '{hostname}' "
+                    f"with key fingerprint: {key.get_fingerprint().hex()}"
+                )
         
         # Add the key to known_hosts for future connections
         if client._host_keys is not None:
@@ -100,8 +109,11 @@ class SecureHostKeyPolicy(paramiko.MissingHostKeyPolicy):
                     # Create directory if it doesn't exist
                     os.makedirs(os.path.dirname(self.known_hosts_file), exist_ok=True)
                     client.save_host_keys(self.known_hosts_file)
+                    logger.info(f"Successfully saved host key to {self.known_hosts_file}")
                 except Exception as e:
-                    logger.error(f"Failed to save host key: {e}")
+                    logger.error(f"Failed to save host key to {self.known_hosts_file}: {e}")
+            else:
+                logger.warning("No known_hosts file path configured, host key will not be saved")
 
 
 def sanitize_filename(filename: str, max_length: int = 255) -> str:
