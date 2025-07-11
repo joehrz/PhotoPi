@@ -198,8 +198,10 @@ class CameraSystem:
         """Captures and displays a test image from each selected camera."""
         folder_with_date = self.config.get("folder_with_date")
         plant_folder = os.path.basename(folder_with_date) if folder_with_date else 'default_folder'
+        # Clean plant_folder of any path separators
+        plant_folder = plant_folder.replace('\\', '').replace('/', '')
         
-        remote_inspect_path = os.path.join(self.pi_project_dir, 'Images', plant_folder, 'inspect')
+        remote_inspect_path = posixpath.join(self.pi_project_dir, 'Images', plant_folder, 'inspect')
         self.ssh_client.execute_command(f'sudo mkdir -p {remote_inspect_path}')
 
         for camera_id in ['A', 'B', 'C', 'D']:
@@ -212,8 +214,10 @@ class CameraSystem:
         """Runs the full, automated imaging sequence: rotate, capture, and finally transfer."""
         folder_with_date = self.config.get("folder_with_date")
         plant_folder = os.path.basename(folder_with_date) if folder_with_date else 'default_folder'
+        # Clean plant_folder of any path separators
+        plant_folder = plant_folder.replace('\\', '').replace('/', '')
         
-        remote_images_path = os.path.join(self.pi_project_dir, 'Images', plant_folder, 'images')
+        remote_images_path = posixpath.join(self.pi_project_dir, 'Images', plant_folder, 'images')
         self.ssh_client.execute_command(f'sudo mkdir -p {remote_images_path}')
 
         ANGLE = int(self.config.get("angle"))
@@ -230,7 +234,7 @@ class CameraSystem:
                     timestamp = f"{self.config.get('Dates', '20240101')}_{j:03d}"
                     self.capture_image(plant_folder, self.config.get("plant_name", "Unknown"), timestamp, camera_id, 'images')
 
-            turntable_script_path = os.path.join(self.pi_project_dir, 'turntable.py')
+            turntable_script_path = posixpath.join(self.pi_project_dir, 'turntable.py')
             cmd = f'python {turntable_script_path} {steps}'
             self.ssh_client.execute_command(cmd)
 
@@ -247,10 +251,13 @@ class CameraSystem:
             camera_id: Camera identifier (A, B, C, or D)
             image_folder: Target folder for the image ('inspect' or 'images')
         """
+        # Clean plant_folder of any path separators
+        plant_folder = plant_folder.replace('\\', '').replace('/', '')
+        
         # Sanitize plant name to prevent path injection
         plant_name = "".join(c for c in plant_name if c.isalnum() or c in ('-', '_'))
         file_name = f"{plant_name}_Camera_{camera_id}_{the_time}.jpg"
-        remote_image_destination = os.path.join(self.pi_project_dir, 'Images', plant_folder, image_folder)
+        remote_image_destination = posixpath.join(self.pi_project_dir, 'Images', plant_folder, image_folder)
 
         command = (
             f'sudo i2cset -y {I2C_BUS_NUMBER} {I2C_DEVICE_ADDRESS} {I2C_REGISTER_ADDRESS} {self.get_camera_code(camera_id)}; \n'
@@ -406,6 +413,9 @@ class CameraSystem:
         Transfers the completed set of images from the Pi back to the local machine,
         preserving the final directory structure.
         """
+        # Clean plant_folder of any path separators
+        plant_folder = plant_folder.replace('\\', '').replace('/', '')
+        
         # Get the full local path for the run, e.g., '.../images/test5_2025-06-13-1331'
         base_local_run_path = self.config.get("folder_with_date")
         if not base_local_run_path:
@@ -417,7 +427,7 @@ class CameraSystem:
         final_local_dir = os.path.join(base_local_run_path, image_folder)
 
         # Construct the full remote directory path to transfer from.
-        remote_dir = os.path.join(self.pi_project_dir, 'Images', plant_folder, image_folder)
+        remote_dir = posixpath.join(self.pi_project_dir, 'Images', plant_folder, image_folder)
         
         # The transfer_files function will create the final_local_dir if it doesn't exist.
         self.ssh_client.transfer_files(remote_dir, final_local_dir)
