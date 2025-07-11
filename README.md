@@ -15,10 +15,13 @@ This document provides a high-level overview. For more detailed information on s
 
 ## Core Features
 
-* **Automated Image Capture:** GUI-driven control of cameras and turntable.
-* **Distributed Processing:** Optional 3D reconstruction on a dedicated remote server.
+* **Automated Image Capture:** GUI-driven control of cameras and turntable with enhanced error handling.
+* **Distributed Processing:** Optional 3D reconstruction on a dedicated remote server with retry logic.
 * **Modular Point Cloud Analysis:** Tools for extracting traits like height, volume, and leaf angles.
-* **Configurable Setup:** Adaptable parameters for diverse experimental needs.
+* **Configurable Setup:** Adaptable parameters with JSON schema validation.
+* **Enhanced Security:** API key management and rate limiting for network operations.
+* **Robust Networking:** Unified network module with connection pooling and automatic retries.
+* **Comprehensive Testing:** Full test suite with pytest for reliability.
 
 ## System Architecture
 
@@ -60,9 +63,10 @@ The following table provides a breakdown of the main components and associated c
 
 ## Software Prerequisites
 
-* Python 3.x
+* Python 3.8+
 * COLMAP (for remote server reconstruction)
-* Specific Python package dependencies (see `setup.py` and component READMEs).
+* Specific Python package dependencies (see `setup.py` and component READMEs)
+* pytest (for running tests)
 
 ## Quick Start & Installation
 
@@ -92,12 +96,25 @@ The project is primarily organized within the `photopack/` directory:
 
 *For detailed operational steps, consult the README file of the respective component linked above.*
 
+## Testing
+
+Run the comprehensive test suite:
+```bash
+python run_tests.py
+```
+
+Or use pytest directly:
+```bash
+pytest -v
+```
+
 ## Configuration Overview
 
-* **`.env` file (Project Root):** Essential for SSH credentials (Pi & Remote Server).
-* **`params.json` (Main System):** GUI settings, capture parameters.
+* **`.env` file (Project Root):** Essential for SSH credentials (Pi & Remote Server) and API keys.
+* **`params.json` (Main System):** GUI settings, capture parameters with schema validation.
 * **`config.yaml` (Remote Server):** COLMAP pipeline settings.
 * **`scale_values.json` & `metrics_config.json` (Point Cloud Analysis):** Scaling factors and CSV output definitions.
+* **Configuration Validation:** All JSON configurations are validated against schemas for reliability.
 
 
 
