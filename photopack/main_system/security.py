@@ -44,26 +44,47 @@ class SecureHostKeyPolicy(paramiko.MissingHostKeyPolicy):
                 f"Key fingerprint: {key.get_fingerprint().hex()}"
             )
             
-            # In production, you might want to implement a GUI dialog instead of input()
-            # For security, we could also implement a timeout mechanism
+            # Cross-platform timeout implementation for user input
             try:
-                import signal
+                import threading
+                import sys
+                from queue import Queue, Empty
                 
-                def timeout_handler(signum, frame):
-                    raise TimeoutError("User input timeout")
+                def get_user_input(prompt, result_queue):
+                    """Get user input in a separate thread."""
+                    try:
+                        response = input(prompt)
+                        result_queue.put(response)
+                    except EOFError:
+                        result_queue.put(None)
                 
-                signal.signal(signal.SIGALRM, timeout_handler)
-                signal.alarm(30)  # 30 second timeout
+                # Create a queue for the result
+                result_queue = Queue()
                 
-                response = input(f"Do you want to continue connecting to {hostname}? (yes/no): ")
-                signal.alarm(0)  # Cancel the alarm
+                # Start input thread
+                input_thread = threading.Thread(
+                    target=get_user_input,
+                    args=(f"Do you want to continue connecting to {hostname}? (yes/no): ", result_queue)
+                )
+                input_thread.daemon = True
+                input_thread.start()
                 
-                if response.lower() != 'yes':
-                    raise paramiko.SSHException(f"Host key verification failed for {hostname}")
+                # Wait for input with timeout (30 seconds)
+                try:
+                    response = result_queue.get(timeout=30)
+                    if response is None:
+                        raise paramiko.SSHException(f"Host key verification failed for {hostname}")
                     
-            except (TimeoutError, KeyboardInterrupt):
-                logger.error(f"Host key verification timeout or cancelled for {hostname}")
-                raise paramiko.SSHException(f"Host key verification timeout for {hostname}")
+                    if response.lower() != 'yes':
+                        raise paramiko.SSHException(f"Host key verification failed for {hostname}")
+                        
+                except Empty:
+                    logger.error(f"Host key verification timeout for {hostname}")
+                    raise paramiko.SSHException(f"Host key verification timeout for {hostname}")
+                    
+            except (KeyboardInterrupt, EOFError):
+                logger.error(f"Host key verification cancelled for {hostname}")
+                raise paramiko.SSHException(f"Host key verification cancelled for {hostname}")
         else:
             # No known_hosts file, just warn
             logger.warning(
