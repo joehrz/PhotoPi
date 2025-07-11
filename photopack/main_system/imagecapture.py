@@ -16,6 +16,15 @@ import tkinter as tk
 from dotenv import load_dotenv
 import time
 import posixpath
+from typing import Dict, List, Tuple, Optional, Any
+
+from .constants import (
+    CAMERA_I2C_CODES, CAMERA_CAPTURE_TIMEOUT_MS, CAMERA_SHARPNESS,
+    CAMERA_VIEWFINDER_WIDTH, CAMERA_VIEWFINDER_HEIGHT, CAMERA_OUTPUT_WIDTH,
+    CAMERA_OUTPUT_HEIGHT, CAMERA_ROI, CAMERA_FOCAL_LENGTH, CAMERA_F_NUMBER,
+    TURNTABLE_STEPS_PER_DEGREE, DEFAULT_PI_PROJECT_DIR, IMAGE_THUMBNAIL_MAX_SIZE,
+    IMAGE_FILE_EXTENSIONS, I2C_BUS_NUMBER, I2C_DEVICE_ADDRESS, I2C_REGISTER_ADDRESS
+)
 
 # Load environment variables from a .env file for easy configuration.
 load_dotenv()
@@ -25,7 +34,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 
 class ConfigLoader:
     """A simple helper class to load configuration from a JSON file."""
-    def __init__(self, config_path='params.json'):
+    def __init__(self, config_path: str = 'params.json') -> None:
         """
         Initializes the ConfigLoader.
 
@@ -34,7 +43,7 @@ class ConfigLoader:
         """
         self.config_path = config_path
 
-    def load(self):
+    def load(self) -> Dict[str, Any]:
         """
         Loads and returns the configuration data from the JSON file.
 
@@ -50,7 +59,7 @@ class ConfigLoader:
 
 class SSHClientWrapper:
     """A wrapper for the paramiko SSHClient to simplify command execution and file transfers."""
-    def __init__(self, ssh_client):
+    def __init__(self, ssh_client: paramiko.SSHClient) -> None:
         """
         Initializes the wrapper with an active paramiko SSHClient instance.
 
@@ -59,7 +68,7 @@ class SSHClientWrapper:
         """
         self.ssh_client = ssh_client
 
-    def execute_command(self, command):
+    def execute_command(self, command: str) -> str:
         """
         Executes a shell command on the remote machine.
 
@@ -81,7 +90,7 @@ class SSHClientWrapper:
             return ""
 
 
-    def transfer_files(self, remote_path, local_path):
+    def transfer_files(self, remote_path: str, local_path: str) -> None:
         """
         Pulls all .jpg/.jpeg/.png from remote_path on the Pi into local_path on the PC.
         Uses POSIX join for remote and os.path for local.
@@ -98,7 +107,7 @@ class SSHClientWrapper:
             logging.info(f"Found {len(file_list)} files on Pi side: {file_list}")
 
             for fname in file_list:
-                if not fname.lower().endswith(('.jpg', '.jpeg', '.png')):
+                if not fname.lower().endswith(IMAGE_FILE_EXTENSIONS):
                     continue
 
                 pi_file = posixpath.join(remote_path, fname)
@@ -138,7 +147,7 @@ class SSHClientWrapper:
 
 class CameraSystem:
     """Manages all camera and turntable operations on the Raspberry Pi."""
-    def __init__(self, ssh_client, gui_root, config_loader):
+    def __init__(self, ssh_client: paramiko.SSHClient, gui_root: tk.Tk, config_loader: ConfigLoader) -> None:
         """
         Initializes the CameraSystem.
 
@@ -152,7 +161,7 @@ class CameraSystem:
         self.config_loader = config_loader
         self.config = self.config_loader.load()
         
-        self.pi_project_dir = os.getenv('PI_PROJECT_DIR', '/home/pi/PhotoPi')
+        self.pi_project_dir = os.getenv('PI_PROJECT_DIR', DEFAULT_PI_PROJECT_DIR)
 
         self.image_frame = tk.Frame(self.gui_root)
         self.image_frame.grid(row=0, column=0)
@@ -161,15 +170,31 @@ class CameraSystem:
         self.image_label = None
         self.camera_labels = {}
     
-    def angle_to_steps(self, angle):
-        return int(angle * (1 / 0.18))
+    def angle_to_steps(self, angle: float) -> int:
+        """Convert angle in degrees to stepper motor steps.
+        
+        Args:
+            angle: Angle in degrees
+            
+        Returns:
+            Number of steps required for the given angle
+        """
+        return int(angle * TURNTABLE_STEPS_PER_DEGREE)
 
-    def full_rev_count(self, angle):
+    def full_rev_count(self, angle: int) -> int:
+        """Calculate number of captures for a full 360-degree rotation.
+        
+        Args:
+            angle: Angle increment in degrees
+            
+        Returns:
+            Number of captures for full rotation
+        """
         if angle == 0:
             return 0
         return 360 // angle
 
-    def inspect(self):
+    def inspect(self) -> None:
         """Captures and displays a test image from each selected camera."""
         folder_with_date = self.config.get("folder_with_date")
         plant_folder = os.path.basename(folder_with_date) if folder_with_date else 'default_folder'
@@ -183,7 +208,7 @@ class CameraSystem:
         
         self.fetch_and_display_images(remote_inspect_path)
 
-    def imaging(self):
+    def imaging(self) -> None:
         """Runs the full, automated imaging sequence: rotate, capture, and finally transfer."""
         folder_with_date = self.config.get("folder_with_date")
         plant_folder = os.path.basename(folder_with_date) if folder_with_date else 'default_folder'
@@ -212,31 +237,50 @@ class CameraSystem:
         # After the loop, transfer the 'images' folder
         self.transfer_images(plant_folder, 'images')
 
-    def capture_image(self, plant_folder, plant_name, the_time, camera_id, image_folder):
-        """Executes the command on the Pi to capture a single image and move it to the correct folder."""
+    def capture_image(self, plant_folder: str, plant_name: str, the_time: str, camera_id: str, image_folder: str) -> None:
+        """Executes the command on the Pi to capture a single image and move it to the correct folder.
+        
+        Args:
+            plant_folder: Folder name for the plant
+            plant_name: Name of the plant being imaged
+            the_time: Timestamp or identifier for the image
+            camera_id: Camera identifier (A, B, C, or D)
+            image_folder: Target folder for the image ('inspect' or 'images')
+        """
+        # Sanitize plant name to prevent path injection
+        plant_name = "".join(c for c in plant_name if c.isalnum() or c in ('-', '_'))
         file_name = f"{plant_name}_Camera_{camera_id}_{the_time}.jpg"
         remote_image_destination = os.path.join(self.pi_project_dir, 'Images', plant_folder, image_folder)
 
         command = (
-            f'sudo i2cset -y 10 0x24 0x24 {self.get_camera_code(camera_id)}; \n'
-            f'libcamera-jpeg --sharpness 2.0 -t 5000 --viewfinder-width 2312 '
-            f'--viewfinder-height 1736 --width 4056 --height 3040 --roi 0.25,0.25,0.45,0.45 '
+            f'sudo i2cset -y {I2C_BUS_NUMBER} {I2C_DEVICE_ADDRESS} {I2C_REGISTER_ADDRESS} {self.get_camera_code(camera_id)}; \n'
+            f'libcamera-jpeg --sharpness {CAMERA_SHARPNESS} -t {CAMERA_CAPTURE_TIMEOUT_MS} '
+            f'--viewfinder-width {CAMERA_VIEWFINDER_WIDTH} '
+            f'--viewfinder-height {CAMERA_VIEWFINDER_HEIGHT} '
+            f'--width {CAMERA_OUTPUT_WIDTH} --height {CAMERA_OUTPUT_HEIGHT} '
+            f'--roi {CAMERA_ROI} '
             f'--vflip '
-            f'-o {file_name} --exif EXIF.FocalLength=51/10 '
+            f'-o {file_name} --exif EXIF.FocalLength={CAMERA_FOCAL_LENGTH} '
             f'--autofocus-on-capture --autofocus-mode auto '
-            f'--exif EXIF.FNumber=9/5; '
+            f'--exif EXIF.FNumber={CAMERA_F_NUMBER}; '
             f'sudo mv {file_name} {remote_image_destination}'
         )
         self.ssh_client.execute_command(command)
         logging.info(f"Camera {camera_id} imaging done. Image saved to {remote_image_destination}")
         self.camera_labels[file_name] = camera_id
 
-    def get_camera_code(self, camera_id):
-        """Returns the I2C code required to select a specific camera on the multiplexer."""
-        camera_codes = {'A': '0x32', 'B': '0x22', 'C': '0x12', 'D': '0x02'}
-        return camera_codes.get(camera_id, '0x32')
+    def get_camera_code(self, camera_id: str) -> str:
+        """Returns the I2C code required to select a specific camera on the multiplexer.
+        
+        Args:
+            camera_id: Camera identifier (A, B, C, or D)
+            
+        Returns:
+            I2C code for the camera
+        """
+        return CAMERA_I2C_CODES.get(camera_id, CAMERA_I2C_CODES['A'])
     
-    def fetch_and_display_images(self, image_directory):
+    def fetch_and_display_images(self, image_directory: str) -> None:
         """Fetches all images from a remote directory and displays them in a new GUI window."""
         raw_images = self.fetch_images(image_directory)
         self.images = [(self.resize_image(img_data), file_name) for img_data, file_name in raw_images]
@@ -244,7 +288,15 @@ class CameraSystem:
         self.create_image_window()
 
 
-    def fetch_images(self, image_directory):
+    def fetch_images(self, image_directory: str) -> List[Tuple[bytes, str]]:
+        """Fetches raw image data from a specified directory on the Pi using SFTP.
+        
+        Args:
+            image_directory: Remote directory path on the Pi
+            
+        Returns:
+            List of tuples containing (image_data, filename)
+        """
         raw_images = []
         sftp_client = None
         try:
@@ -255,7 +307,7 @@ class CameraSystem:
             logging.info(f"Files found on Pi: {file_list}")
 
             for file_name in file_list:
-                if not file_name.lower().endswith(('.png', '.jpg', '.jpeg')):
+                if not file_name.lower().endswith(IMAGE_FILE_EXTENSIONS):
                     continue
 
                 # Correct POSIX join on the Pi side
@@ -298,11 +350,17 @@ class CameraSystem:
     #             sftp_client.close()
     #     return raw_images
 
-    def resize_image(self, image_data):
-        """Resizes an image to a thumbnail for display in the GUI."""
-        max_size = (800, 600)
+    def resize_image(self, image_data: bytes) -> ImageTk.PhotoImage:
+        """Resizes an image to a thumbnail for display in the GUI.
+        
+        Args:
+            image_data: Raw image bytes
+            
+        Returns:
+            Resized image suitable for Tkinter display
+        """
         image = Image.open(io.BytesIO(image_data))
-        image.thumbnail(max_size, Image.Resampling.LANCZOS)
+        image.thumbnail(IMAGE_THUMBNAIL_MAX_SIZE, Image.Resampling.LANCZOS)
         return ImageTk.PhotoImage(image)
 
     def create_image_window(self):

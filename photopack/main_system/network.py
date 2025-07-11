@@ -2,6 +2,7 @@
 
 import paramiko
 import logging
+from .security import SecureHostKeyPolicy
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -31,7 +32,7 @@ class NetworkManager:
         Establishes the SSH and SFTP connections.
         """
         self.client = paramiko.SSHClient()
-        self.client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        self.client.set_missing_host_key_policy(SecureHostKeyPolicy())
         try:
             self.client.connect(self.hostname, username=self.username, password=self.password)
             self.sftp = self.client.open_sftp()

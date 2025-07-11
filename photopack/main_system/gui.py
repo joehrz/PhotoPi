@@ -11,12 +11,22 @@ import threading
 from tkinter import messagebox
 import os
 from dotenv import load_dotenv
-from pathlib import Path 
+from pathlib import Path
+from typing import Dict, Any, Optional
 
-from imagecapture import CameraSystem
-from credentials import NetworkConfig
-from config import Config
-from network import NetworkManager
+from .imagecapture import CameraSystem
+from .credentials import NetworkConfig
+from .config import Config
+from .unified_network import UnifiedNetworkManager
+from .security import (
+    SecureHostKeyPolicy, sanitize_filename, sanitize_path,
+    validate_plant_name, validate_angle, validate_positive_integer
+)
+from .constants import (
+    GUI_WINDOW_WIDTH, GUI_WINDOW_HEIGHT, GUI_UPDATE_DELAY_MS,
+    SSH_RECONNECT_DELAY, SSH_RECONNECT_RETRY_INTERVAL,
+    ANGLE_MIN, ANGLE_MAX, PLANT_NAME_MAX_LENGTH, FOLDER_PATH_MAX_LENGTH
+)
 
 
 # Load environment variables from a .env file
@@ -36,11 +46,12 @@ class InputGUI:
         """
         self.master = master
         self.master.title("PhotoPI")
-        self.master.geometry("500x500")
+        self.master.geometry(f"{GUI_WINDOW_WIDTH}x{GUI_WINDOW_HEIGHT}")
         self.config = Config()
         self.network_manager = None
         self.ssh_client = paramiko.SSHClient()
-        self.ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        # Use secure host key policy instead of AutoAddPolicy
+        self.ssh_client.set_missing_host_key_policy(SecureHostKeyPolicy())
 
         # Load credentials from environment variables
         self.pi_username = os.getenv('PI_USERNAME')
@@ -64,7 +75,7 @@ class InputGUI:
             net_config.discover_pi_hostname()
 
             if net_config.hostname and self.pi_username and self.pi_password:
-                self.network_manager = NetworkManager(net_config.hostname, self.pi_username, self.pi_password)
+                self.network_manager = UnifiedNetworkManager(net_config.hostname, self.pi_username, self.pi_password)
                 self.config.set_value('pi_hostname', net_config.hostname)
                 self.config.save_config()
 
@@ -89,29 +100,35 @@ class InputGUI:
                 messagebox.showinfo("Success", message)
             else:
                 messagebox.showerror("Error", message)
-        self.master.after(100, update_status)
+        self.master.after(GUI_UPDATE_DELAY_MS, update_status)
         
 
 
-    def validate_angle_entry(self, text):
+    def validate_angle_entry(self, text: str) -> bool:
+        """Validate angle entry allowing empty string or valid angle."""
         if text == "":
             return True
         try:
             value = int(text)
+            return ANGLE_MIN <= value <= ANGLE_MAX
         except ValueError:
             return False
-        return 0 <= value <= 360
 
-    def validate_text_entry(self, text):
+    def validate_text_entry(self, text: str) -> bool:
         """
-        Validates text entry in the GUI.
+        Validates text entry for plant names.
 
         Parameters:
             text (str): The text to validate.
 
         Returns:
-            bool: Always returns True (example validation function).
+            bool: True if valid, False otherwise.
         """
+        if len(text) > PLANT_NAME_MAX_LENGTH:
+            return False
+        # Allow alphanumeric, spaces, hyphens, and underscores
+        if text and not all(c.isalnum() or c in ' -_' for c in text):
+            return False
         return True
         
     def setup_gui_components(self):
@@ -222,17 +239,17 @@ class InputGUI:
 
 
 
-    def read_input_values(self):
+    def read_input_values(self) -> Dict[str, Any]:
         """Reads input values from the GUI and returns them as a dictionary."""
         return {
             'camera_a': self.camera_a_var.get(),
             'camera_b': self.camera_b_var.get(),
             'camera_c': self.camera_c_var.get(),
             'camera_d': self.camera_d_var.get(),
-            'angle': self.angle_entry.get().strip(),  # Strip whitespace
-            'plant_name': self.plant_name_entry.get().strip(),  # Strip whitespace
-            'seconds': self.seconds_entry.get().strip(),  # Strip whitespace
-            'folder_path': self.folder_path_entry.get().strip()  # Strip whitespace
+            'angle': self.angle_entry.get().strip(),
+            'plant_name': self.plant_name_entry.get().strip(),
+            'seconds': self.seconds_entry.get().strip(),
+            'folder_path': self.folder_path_entry.get().strip()
         }
 
 
@@ -251,53 +268,96 @@ class InputGUI:
     #     self.config.save_config()
 
 
-    def update_configuration(self, inputs):
-        """Updates the configuration based on input values."""
-        # 1) Build the timestamp and full key
+    def update_configuration(self, inputs: Dict[str, Any]) -> None:
+        """Updates the configuration based on input values with proper sanitization."""
+        # Sanitize plant name
+        plant_name = validate_plant_name(inputs['plant_name'])
+        if not plant_name:
+            plant_name = "unnamed"
+        
+        # Build the timestamp and full key with sanitized name
         ts = datetime.now().strftime('%Y-%m-%d-%H%M')
-        full_ts = f"{inputs['plant_name']}{ts}"
+        full_ts = f"{plant_name}{ts}"
         inputs['timestamp'] = full_ts
+        inputs['plant_name'] = plant_name  # Use sanitized name
 
-        # 2) Join the folder path without pathlib
-        folder_with_date = os.path.join(inputs['folder_path'], full_ts)
+        # Sanitize and validate folder path
+        folder_path = sanitize_path(inputs['folder_path'])
+        if not folder_path:
+            raise ValueError("Invalid folder path")
+        
+        folder_with_date = os.path.join(folder_path, full_ts)
         inputs['folder_with_date'] = folder_with_date
+        inputs['folder_path'] = folder_path  # Use sanitized path
 
-        # 3) Persist to your Config
+        # Persist to Config
         for key, value in inputs.items():
             self.config.set_value(key, value)
         self.config.save_config()
 
-    def transfer_configuration(self):
+    def transfer_configuration(self) -> None:
         """Transfers the configuration file to the Raspberry Pi."""
         try:
-            self.network_manager.connect()
-            self.network_manager.transfer_file('params.json', '/home/photopi/params.json')
+            # UnifiedNetworkManager doesn't need explicit connect/disconnect
+            self.network_manager.transfer_file_to_remote('params.json', '/home/photopi/params.json')
             print("Success", "Configuration transferred successfully.")
         except Exception as e:
             print("Error", f"Failed to transfer configuration: {e}")
-        finally:
-            self.network_manager.disconnect()
             
-    def validate_inputs(self, inputs):
-        """Validates input fields to ensure they are not empty."""
-        for key, value in inputs.items():
-            if key in ['angle', 'plant_name', 'seconds', 'folder_path'] and not value:  # Check specific fields for non-emptiness
-                messagebox.showerror("Input Error", f"{key.replace('_', ' ').capitalize()} cannot be empty.")
-                return False
+    def validate_inputs(self, inputs: Dict[str, Any]) -> bool:
+        """Validates input fields with proper validation functions."""
+        # Validate angle
+        if not inputs.get('angle'):
+            messagebox.showerror("Input Error", "Angle cannot be empty.")
+            return False
+        angle = validate_angle(inputs['angle'])
+        if angle is None:
+            messagebox.showerror("Input Error", "Angle must be between 0 and 360.")
+            return False
+        
+        # Validate plant name
+        if not inputs.get('plant_name'):
+            messagebox.showerror("Input Error", "Plant name cannot be empty.")
+            return False
+        plant_name = validate_plant_name(inputs['plant_name'])
+        if not plant_name:
+            messagebox.showerror("Input Error", "Plant name contains invalid characters.")
+            return False
+        
+        # Validate seconds (capture delay)
+        if not inputs.get('seconds'):
+            messagebox.showerror("Input Error", "Image capture delay cannot be empty.")
+            return False
+        seconds = validate_positive_integer(inputs['seconds'], max_value=300)  # Max 5 minutes
+        if seconds is None:
+            messagebox.showerror("Input Error", "Image capture delay must be a positive number (max 300 seconds).")
+            return False
+        
+        # Validate folder path
+        if not inputs.get('folder_path'):
+            messagebox.showerror("Input Error", "Folder path cannot be empty.")
+            return False
+        if not os.path.exists(inputs['folder_path']):
+            messagebox.showerror("Input Error", "Folder path does not exist.")
+            return False
+        
         return True
 
 
 
 
-    def submit(self):
+    def submit(self) -> None:
         """
         Reads input values, validates them, updates the configuration, and transfers the configuration file.
         """
         inputs = self.read_input_values()
         if not self.validate_inputs(inputs):
             return
-        self.update_configuration(inputs)
-        self.transfer_configuration()
+        try:
+            self.update_configuration(inputs)
+            self.transfer_configuration()
+        except ValueError as e:
+            messagebox.showerror("Configuration Error", str(e))
 
     def disable_buttons(self):
         """
@@ -368,23 +428,24 @@ class InputGUI:
             logging.error(f"Failed to send reboot command: {e}")
             messagebox.showerror("Reboot Error", f"Failed to send reboot command: {e}")
 
-    def wait_for_pi_to_reboot(self):
+    def wait_for_pi_to_reboot(self) -> None:
         """
         Waits for the Raspberry Pi to come back online after a reboot.
         """
-        time.sleep(60)  # Wait for 60 seconds before attempting to reconnect
+        time.sleep(SSH_RECONNECT_DELAY)  # Wait before attempting to reconnect
         pi_hostname = self.config.get_value('pi_hostname')
         while True:
             try:
                 self.ssh_client = paramiko.SSHClient()
-                self.ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+                # Use secure host key policy
+                self.ssh_client.set_missing_host_key_policy(SecureHostKeyPolicy())
                 self.ssh_client.connect(pi_hostname, username=self.pi_username, password=self.pi_password)
                 logging.info("Raspberry Pi is back online.")
-                self.master.after(100, lambda: messagebox.showinfo("Reboot", "Raspberry Pi is back online."))
+                self.master.after(GUI_UPDATE_DELAY_MS, lambda: messagebox.showinfo("Reboot", "Raspberry Pi is back online."))
                 break
             except Exception as e:
                 logging.info("Waiting for Raspberry Pi to come back online...")
-                time.sleep(5)
+                time.sleep(SSH_RECONNECT_RETRY_INTERVAL)
 
     def reset(self):
         """
