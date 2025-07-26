@@ -4,8 +4,8 @@ import logging
 import copy
 import matplotlib.pyplot as plt
 
-from photopack.point_cloud_analysis.point_cloud.convex_hull import ConvexHullAnalyzer
-from photopack.point_cloud_analysis.point_cloud.main_stem_segmentation import MainStemSegmentation
+from point_cloud.convex_hull import ConvexHullAnalyzer
+from point_cloud.main_stem_segmentation import MainStemSegmentation
 
 logger = logging.getLogger(__name__)
 
