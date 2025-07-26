@@ -132,7 +132,7 @@ def compute_metrics(point_cloud, modules_to_run, seg_mode, scale, output_path, b
     # 1) PROCESSING
     if 'processing' in modules_to_run:
         try:
-            from photopack.point_cloud_analysis.point_cloud.processing import PointCloudProcessor
+            from point_cloud.processing import PointCloudProcessor
             proc = PointCloudProcessor(point_cloud)
             proc.process()
             logger.info("Finished 'processing' module.")
@@ -142,7 +142,8 @@ def compute_metrics(point_cloud, modules_to_run, seg_mode, scale, output_path, b
     # 2) CONVEX HULL
     if 'convex_hull' in modules_to_run:
         try:
-            from photopack.point_cloud_analysis.point_cloud.convex_hull import ConvexHullAnalyzer
+            #from photopack.point_cloud_analysis.point_cloud.convex_hull import ConvexHullAnalyzer
+            from point_cloud.convex_hull import ConvexHullAnalyzer
             hull = ConvexHullAnalyzer(point_cloud)
             v100_u = hull.compute_convex_hull_volume(scale=1.0)
             v100   = hull.compute_convex_hull_volume(scale=scale)
@@ -172,7 +173,7 @@ def compute_metrics(point_cloud, modules_to_run, seg_mode, scale, output_path, b
     # 3) HR ANALYSIS
     if 'hr_analysis' in modules_to_run:
         try:
-            from photopack.point_cloud_analysis.point_cloud.hr_analysis import HRAnalyzer
+            from point_cloud.hr_analysis import HRAnalyzer
             hr = HRAnalyzer(point_cloud, scale)
             hr.analyze_hr_with_mainstem(
                 alpha=1.0, beta=2.0,
@@ -200,7 +201,7 @@ def compute_metrics(point_cloud, modules_to_run, seg_mode, scale, output_path, b
     # 4) PROJECTION
     if 'projection' in modules_to_run:
         try:
-            from photopack.point_cloud_analysis.point_cloud.projection import ProjectionAnalyzer
+            from point_cloud.projection import ProjectionAnalyzer
             proj = ProjectionAnalyzer(point_cloud, scale)
 
             area = proj.compute_alpha_shape_area(alpha=15, apply_scale=True)
@@ -224,7 +225,7 @@ def compute_metrics(point_cloud, modules_to_run, seg_mode, scale, output_path, b
     # 5) SEGMENTATION
     if 'segmentation' in modules_to_run:
         try:
-            from photopack.point_cloud_analysis.point_cloud.segmentation_extractor import Segmentation
+            from point_cloud.segmentation_extractor import Segmentation
             seg = Segmentation(point_cloud, min_cluster_size=50)
             if seg_mode in ('auto', 'both'):
                 seg.visualize_downsampled()
@@ -244,14 +245,32 @@ def compute_metrics(point_cloud, modules_to_run, seg_mode, scale, output_path, b
     # 6) MAIN STEM SEGMENTATION
     if 'mainstem_segmentation' in modules_to_run:
         try:
-            from photopack.point_cloud_analysis.point_cloud.main_stem_segmentation import MainStemSegmentation
+            from point_cloud.main_stem_segmentation import MainStemSegmentation
             segmentation = MainStemSegmentation(point_cloud)
-            segmentation.run_full_pipeline(
-                alpha=1.0, beta=1.0,
-                raindrop_alpha=1.0, raindrop_beta=1.0,
-                gamma=10.0, delta=2.0,
-                use_trunk_axis=True, debug=True,
-                output_path=output_path, base=base
+            # segmentation.run_full_pipeline(
+            #     alpha=1.0, beta=1.0,
+            #     raindrop_alpha=1.0, raindrop_beta=1.0,
+            #     gamma=10.0, delta=2.0,
+            #     use_trunk_axis=True, debug=True,
+            #     output_path=output_path, base=base
+            # )
+            branch_data, pipeline_stats = segmentation.run_adaptive_pipeline(
+                target_points_per_slice = 200,
+                multi_scale_levels      = 3,
+                use_geometric_bridging  = False,
+                max_angle_deg           = 45,
+                max_z_gap               = 5,
+                density_tolerance       = 4.0,
+                alpha                   = 1.0,
+                beta                    = 0.5,
+                raindrop_alpha          = 1.0,
+                raindrop_beta           = 1.0,
+                gamma                   = 2.0,
+                delta                   = 1.0,
+                use_trunk_axis          = True,
+                debug                   = True,
+                output_path             = output_path,
+                base                    = base
             )
             segmentation.visualize_final_graph_types()
             logger.info("[mainstem_segmentation] Pipeline complete.")
@@ -263,7 +282,7 @@ def compute_metrics(point_cloud, modules_to_run, seg_mode, scale, output_path, b
                 )
 
             if 'leaf_angles' in modules_to_run:
-                from photopack.point_cloud_analysis.point_cloud.leaf_angles import LeafAngleAnalyzer
+                from point_cloud.leaf_angles import LeafAngleAnalyzer
                 la = LeafAngleAnalyzer(segmentation)
                 la.compute_leaf_angles_node_bfs(
                     n_main_stem=5, n_leaf=5,
