@@ -2,6 +2,15 @@
 
 **PhotoPi** is a Python-based system designed for automated 3D plant phenotyping. It integrates a multi-camera setup and a turntable controlled by a Raspberry Pi for systematic image acquisition. These images are then processed (optionally on a remote server using COLMAP) to reconstruct 3D point cloud models of plants, which can be further analyzed to extract quantitative phenotypic traits.
 
+## System Overview
+
+<p align="center">
+<img src="docs/images/full_complete_rig_back.jpg" alt="Complete PhotoPi photogrammetry rig setup showing camera array, turntable, and aluminum frame" width="80%"/>
+</p>
+
+*Complete PhotoPi system setup: multi-camera array, motorized turntable, and aluminum frame structure for automated 3D plant phenotyping*
+
+
 ## Overview
 
 PhotoPi streamlines the complex process of 3D plant model generation and analysis. It provides a cost-effective and automated alternative to manual phenotyping, enabling researchers to capture detailed structural data of plants for various studies in agriculture, botany, and plant breeding.
