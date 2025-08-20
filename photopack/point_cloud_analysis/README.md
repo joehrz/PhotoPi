@@ -25,6 +25,15 @@ For a general overview of the entire PhotoPi project, please see the [main READM
 
 After a 3D point cloud of a plant is successfully reconstructed, this toolkit enables the extraction of meaningful biological measurements. These metrics can be used to assess plant growth, morphology, and response to various treatments, contributing to research in plant science, agriculture, and breeding. The system is designed to be modular, allowing users to run specific analyses as needed.
 
+
+## Visual Overview
+
+<p align="center">
+<img src="../../../docs/images/Wheat_Gladius_B6_2023-06-27-2029_labeled_pcd_with_leaf_angles.svg" alt="Example wheat plant analysis showing segmented stem (red), leaves (green), and measured leaf angles" width="800"/>
+</p>
+
+*Automated wheat analysis: stem segmentation (red), leaves (green), and leaf angle measurements*
+
 ## Core Modules and Functionality
 
 The analysis toolkit is primarily driven by `main.py` which orchestrates various specialized modules located in the `point_cloud/` and `utils/` subdirectories:
