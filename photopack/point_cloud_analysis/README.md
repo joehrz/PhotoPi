@@ -29,7 +29,7 @@ After a 3D point cloud of a plant is successfully reconstructed, this toolkit en
 ## Visual Overview
 
 <p align="center">
-<img src="../../docs/images/Wheat_Gladius_B6_2023-06-27-2029_labeled_pcd_with_leaf_angles.svg" alt="Example wheat plant analysis showing segmented stem (red), leaves (green), and measured leaf angles" width="800"/>
+<img src="../../docs/images/Wheat_Gladius_B6_2023-06-27-2029_labeled_pcd_with_leaf_angles.svg" alt="Example wheat plant analysis showing segmented stem (red), leaves (green), and measured leaf angles" width="1200"/>
 </p>
 
 *Automated wheat analysis: stem segmentation (red), leaves (green), and leaf angle measurements*
