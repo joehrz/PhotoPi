@@ -116,8 +116,36 @@ pytest -v
 * **`scale_values.json` & `metrics_config.json` (Point Cloud Analysis):** Scaling factors and CSV output definitions.
 * **Configuration Validation:** All JSON configurations are validated against schemas for reliability.
 
+## Dataset
 
+This work includes a dataset of 3D point clouds of wheat generated using the PhotoPi system:
 
+**3D Point Clouds of Wheat from RGB-images using Structure from Motion and Low-Cost Photogrammetry**
 
+* **Authors:** Beck, Michael A.; Hrzich, Joe; Bidinosti, Christopher P.; Henry, Christopher J.; Manawasinghe, Kalhari; Tanino, Karen
+* **DOI:** [https://doi.org/10.20383/103.01255](https://doi.org/10.20383/103.01255)
+* **Repository:** [FRDR-DFDR](https://www.frdr-dfdr.ca/repo/dataset/2e8d36ee-2183-4926-94d1-7323a702e309)
+* **Description:** Contains raw RGB images and reconstructed point clouds of 6 different wheat genotypes at two time instances (14 and 35 days after planting), with 10 instances each, for a total of 120 imaging sessions. Each session includes 140 RGB images (4056x3040 pixels) and corresponding 3D point clouds.
 
+## Citation
+
+If you find our work useful, please cite our paper:
+
+```bib
+@article{hrzich2025lowcost,
+  title={A Low-Cost Photogrammetry System for 3D Plant Modeling and Phenotyping},
+  author={Hrzich, Joe and Beck, Michael A. and Bidinosti, Christopher P. and Henry, Christopher J. and Manawasinghe, Kalhari and Tanino, Karen},
+  journal={arXiv preprint arXiv:2504.16840},
+  year={2025},
+  url={https://doi.org/10.48550/arXiv.2504.16840}
+}
+
+@dataset{beck2025wheat,
+  title={3D Point Clouds of Wheat from RGB-images using Structure from Motion and Low-Cost Photogrammetry},
+  author={Beck, Michael A. and Hrzich, Joe and Bidinosti, Christopher P. and Henry, Christopher J. and Manawasinghe, Kalhari and Tanino, Karen},
+  year={2025},
+  publisher={Federated Research Data Repository},
+  doi={10.20383/103.01255},
+  url={https://www.frdr-dfdr.ca/repo/dataset/2e8d36ee-2183-4926-94d1-7323a702e309}
+}
 
