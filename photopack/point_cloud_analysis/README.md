@@ -45,10 +45,22 @@ The analysis toolkit is primarily driven by `main.py` which orchestrates various
 ## Visual Overview
 
 <p align="center">
-<img src="../../docs/images/Wheat_Gladius_B6_2023-06-27-2029_labeled_pcd_with_leaf_angles.svg" alt="Example wheat plant analysis showing segmented stem (red), leaves (green), and measured leaf angles" style="width: 90%; max-width: 1400px;"/>
+<img src="../../docs/images/Wheat_Gladius_B6_2023-06-27-2029_labeled_pcd_with_leaf_angles.svg" alt="Wheat plant analysis with stem segmentation and leaf angles" style="width: 90%; max-width: 1400px;"/>
 </p>
 
 *Automated wheat analysis: stem segmentation (red), leaves (green), and leaf angle measurements*
+
+<p align="center">
+<img src="../../docs/images/Wheat_Gladius_B6_2023-07-19-1913_fused_output_points_and_alpha_shape.svg" alt="Wheat plant 2D projection with alpha shape" style="width: 90%; max-width: 1400px;"/>
+</p>
+
+*2D projection analysis: point cloud projection with alpha shape boundary for ground-plane area calculation*
+
+<p align="center">
+<img src="../../docs/images/Wheat_Chara_A9_2023-06-27-1843_fused_output_segmented_pointcloud.svg" alt="Multiple wheat seedlings segmented from single point cloud" style="width: 90%; max-width: 1400px;"/>
+</p>
+
+*Multi-plant segmentation: Three individual wheat seedlings automatically separated and labeled from a single dense point cloud*
 
 ## Prerequisites
 
