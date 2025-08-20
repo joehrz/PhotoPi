@@ -5,7 +5,7 @@
 ## System Overview
 
 <p align="center">
-<img src="docs/images/full_complete_rig_back.jpg" alt="Complete PhotoPi photogrammetry rig setup showing camera array, turntable, and aluminum frame" width="80%"/>
+<img src="docs/images/full_complete_rig_back.jpg" alt="Complete PhotoPi photogrammetry rig setup showing camera array, turntable, and aluminum frame" width="50%"/>
 </p>
 
 *Complete PhotoPi system setup: multi-camera array, motorized turntable, and aluminum frame structure for automated 3D plant phenotyping*
