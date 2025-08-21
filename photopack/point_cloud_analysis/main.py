@@ -272,6 +272,7 @@ def compute_metrics(point_cloud, modules_to_run, seg_mode, scale, output_path, b
                 output_path             = output_path,
                 base                    = base
             )
+
             segmentation.visualize_final_graph_types()
             logger.info("[mainstem_segmentation] Pipeline complete.")
 
