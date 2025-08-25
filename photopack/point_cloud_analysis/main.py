@@ -11,6 +11,14 @@ import csv
 import json
 import re
 
+# SVG visualization utilities
+try:
+    from utils.svg_utils import SVGRenderer
+    SVG_AVAILABLE = True
+except ImportError:
+    SVG_AVAILABLE = False
+    logging.warning("SVG utilities not available. Install 'svgwrite' for SVG export functionality.")
+
 logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
 logger = logging.getLogger(__name__)
 
@@ -122,12 +130,42 @@ def safe_div(a, b):
     return a / b if b else ""
 
 
-def compute_metrics(point_cloud, modules_to_run, seg_mode, scale, output_path, base):
+def compute_metrics(point_cloud, modules_to_run, seg_mode, scale, output_path, base, enable_svg=False, svg_camera_params=None):
     """
     Call each module (convex_hull, hr_analysis, leaf_angles, projection, etc.)
     Return a dict with all relevant metrics.
+    
+    Args:
+        point_cloud: Open3D point cloud object
+        modules_to_run: List of module names to execute
+        seg_mode: Segmentation mode ('auto', 'manual', 'both')
+        scale: Scale factor for measurements
+        output_path: Path for output files
+        base: Base filename for outputs
+        enable_svg: Whether to generate SVG visualizations
+        svg_camera_params: Tuple of (camera_matrix, extrinsic_matrix) for SVG projection
     """
     row_data = {}
+    svg_renderer = None
+    
+    # Initialize SVG renderer if enabled
+    if enable_svg and SVG_AVAILABLE:
+        svg_renderer = SVGRenderer(width=1200, height=900)
+        if svg_camera_params is None:
+            # Use default camera parameters if not provided
+            camera_matrix = np.array([
+                [800, 0, 600],
+                [0, 800, 450], 
+                [0, 0, 1]
+            ], dtype=float)
+            extrinsic_matrix = np.eye(4)
+            extrinsic_matrix[2, 3] = -50  # Move camera back
+            svg_camera_params = (camera_matrix, extrinsic_matrix)
+            logger.info("Using default camera parameters for SVG export")
+        
+        # Determine SVG output directory
+        svg_output_path = output_path if output_path else os.path.join(os.path.dirname(__file__), "..", "..")
+        logger.info(f"SVG export enabled. Output path: {svg_output_path}")
 
     # 1) PROCESSING
     if 'processing' in modules_to_run:
@@ -135,6 +173,22 @@ def compute_metrics(point_cloud, modules_to_run, seg_mode, scale, output_path, b
             from point_cloud.processing import PointCloudProcessor
             proc = PointCloudProcessor(point_cloud)
             proc.process()
+            
+            # SVG export for processing
+            if svg_renderer:
+                try:
+                    points = np.asarray(point_cloud.points)
+                    svg_filename = os.path.join(svg_output_path, f"{base}_processing.svg")
+                    svg_renderer.export_point_cloud_svg(
+                        points, svg_camera_params[0], svg_camera_params[1],
+                        filename=svg_filename,
+                        color_scheme="uniform",
+                        point_radius=1.0
+                    )
+                    logger.info(f"[processing] SVG exported: {svg_filename}")
+                except Exception as e:
+                    logger.warning(f"[processing] SVG export failed: {e}")
+            
             logger.info("Finished 'processing' module.")
         except ImportError as e:
             logger.error(f"Could not import processing module: {e}")
@@ -162,6 +216,22 @@ def compute_metrics(point_cloud, modules_to_run, seg_mode, scale, output_path, b
             })
 
             hull.visualize_convex_hull()
+            
+            # SVG export for convex hull
+            if svg_renderer:
+                try:
+                    points = np.asarray(point_cloud.points)
+                    svg_filename = os.path.join(svg_output_path, f"{base}_convex_hull.svg")
+                    svg_renderer.export_point_cloud_svg(
+                        points, svg_camera_params[0], svg_camera_params[1],
+                        filename=svg_filename,
+                        color_scheme="height",
+                        point_radius=1.5
+                    )
+                    logger.info(f"[convex_hull] SVG exported: {svg_filename}")
+                except Exception as e:
+                    logger.warning(f"[convex_hull] SVG export failed: {e}")
+            
             logger.info(
                 f"[convex_hull] unscaled={v100_u:.2f}, scaled={v100:.2f}, "
                 f"top60_u={v60_u:.2f}, top60={v60:.2f}, "
@@ -183,6 +253,21 @@ def compute_metrics(point_cloud, modules_to_run, seg_mode, scale, output_path, b
             )
             hr.visualize_with_open3d()
             hr.plot_radius_vs_theta()
+
+            # SVG export for HR analysis
+            if svg_renderer:
+                try:
+                    points = np.asarray(point_cloud.points)
+                    svg_filename = os.path.join(svg_output_path, f"{base}_hr_analysis.svg")
+                    svg_renderer.export_point_cloud_svg(
+                        points, svg_camera_params[0], svg_camera_params[1],
+                        filename=svg_filename,
+                        color_scheme="height",
+                        point_radius=1.0
+                    )
+                    logger.info(f"[hr_analysis] SVG exported: {svg_filename}")
+                except Exception as e:
+                    logger.warning(f"[hr_analysis] SVG export failed: {e}")
 
             row_data.update({
                 "H_Max":             hr.height,
@@ -214,6 +299,21 @@ def compute_metrics(point_cloud, modules_to_run, seg_mode, scale, output_path, b
             proj.plot_original_points()
             proj.plot_alpha_shape()
             proj.plot_points_and_alpha_shape()
+            
+            # SVG export for projection analysis
+            if svg_renderer:
+                try:
+                    points = np.asarray(point_cloud.points)
+                    svg_filename = os.path.join(svg_output_path, f"{base}_projection.svg")
+                    svg_renderer.export_point_cloud_svg(
+                        points, svg_camera_params[0], svg_camera_params[1],
+                        filename=svg_filename,
+                        color_scheme="distance",
+                        point_radius=1.0
+                    )
+                    logger.info(f"[projection] SVG exported: {svg_filename}")
+                except Exception as e:
+                    logger.warning(f"[projection] SVG export failed: {e}")
 
             logger.info(
                 f"[projection] plane_projection_area={area:.2f}, "
@@ -237,6 +337,22 @@ def compute_metrics(point_cloud, modules_to_run, seg_mode, scale, output_path, b
                 seg.segment_and_store()
                 logger.info("[segmentation] Auto-segmentation complete.")
                 seg.visualize_segments_original()
+                
+                # SVG export for segmentation
+                if svg_renderer:
+                    try:
+                        points = np.asarray(point_cloud.points)
+                        svg_filename = os.path.join(svg_output_path, f"{base}_segmentation.svg")
+                        svg_renderer.export_point_cloud_svg(
+                            points, svg_camera_params[0], svg_camera_params[1],
+                            filename=svg_filename,
+                            color_scheme="uniform",
+                            point_radius=1.2
+                        )
+                        logger.info(f"[segmentation] SVG exported: {svg_filename}")
+                    except Exception as e:
+                        logger.warning(f"[segmentation] SVG export failed: {e}")
+                        
             if seg_mode in ('manual', 'both'):
                 logger.info("[segmentation] Manual steps not fully shown here.")
         except ImportError as e:
@@ -247,31 +363,31 @@ def compute_metrics(point_cloud, modules_to_run, seg_mode, scale, output_path, b
         try:
             from point_cloud.main_stem_segmentation import MainStemSegmentation
             segmentation = MainStemSegmentation(point_cloud)
-            # segmentation.run_full_pipeline(
-            #     alpha=1.0, beta=1.0,
-            #     raindrop_alpha=1.0, raindrop_beta=1.0,
-            #     gamma=10.0, delta=2.0,
-            #     use_trunk_axis=True, debug=True,
-            #     output_path=output_path, base=base
-            # )
-            branch_data, pipeline_stats = segmentation.run_adaptive_pipeline(
-                target_points_per_slice = 200,
-                multi_scale_levels      = 3,
-                use_geometric_bridging  = False,
-                max_angle_deg           = 45,
-                max_z_gap               = 5,
-                density_tolerance       = 4.0,
-                alpha                   = 1.0,
-                beta                    = 0.5,
-                raindrop_alpha          = 1.0,
-                raindrop_beta           = 1.0,
-                gamma                   = 2.0,
-                delta                   = 1.0,
-                use_trunk_axis          = True,
-                debug                   = True,
-                output_path             = output_path,
-                base                    = base
+            segmentation.run_full_pipeline(
+                alpha=1.0, beta=1.0,
+                raindrop_alpha=1.0, raindrop_beta=1.0,
+                gamma=10.0, delta=2.0,
+                use_trunk_axis=True, debug=True,
+                output_path=output_path, base=base
             )
+            # branch_data, pipeline_stats = segmentation.run_adaptive_pipeline(
+            #     target_points_per_slice = 200,
+            #     multi_scale_levels      = 3,
+            #     use_geometric_bridging  = False,
+            #     max_angle_deg           = 45,
+            #     max_z_gap               = 5,
+            #     density_tolerance       = 4.0,
+            #     alpha                   = 1.0,
+            #     beta                    = 0.5,
+            #     raindrop_alpha          = 1.0,
+            #     raindrop_beta           = 1.0,
+            #     gamma                   = 2.0,
+            #     delta                   = 1.0,
+            #     use_trunk_axis          = True,
+            #     debug                   = True,
+            #     output_path             = output_path,
+            #     base                    = base
+            # )
 
             segmentation.visualize_final_graph_types()
             logger.info("[mainstem_segmentation] Pipeline complete.")
@@ -281,6 +397,26 @@ def compute_metrics(point_cloud, modules_to_run, seg_mode, scale, output_path, b
                     [segmentation.labeled_pcd],
                     window_name="MainStemSegmentation - Labeled PCD"
                 )
+                
+                # SVG export for main stem segmentation
+                if svg_renderer:
+                    try:
+                        points = np.asarray(segmentation.labeled_pcd.points)
+                        colors = None
+                        if segmentation.labeled_pcd.has_colors():
+                            colors = np.asarray(segmentation.labeled_pcd.colors)
+                        
+                        svg_filename = os.path.join(svg_output_path, f"{base}_mainstem_segmentation.svg")
+                        svg_renderer.export_point_cloud_svg(
+                            points, svg_camera_params[0], svg_camera_params[1],
+                            colors=colors,
+                            filename=svg_filename,
+                            color_scheme="original" if colors is not None else "height",
+                            point_radius=1.0
+                        )
+                        logger.info(f"[mainstem_segmentation] SVG exported: {svg_filename}")
+                    except Exception as e:
+                        logger.warning(f"[mainstem_segmentation] SVG export failed: {e}")
 
             if 'leaf_angles' in modules_to_run:
                 from point_cloud.leaf_angles import LeafAngleAnalyzer
@@ -304,6 +440,38 @@ def compute_metrics(point_cloud, modules_to_run, seg_mode, scale, output_path, b
                 row_data["Leaf_angle_count"]  = len(valid)
                 for i, a in enumerate(valid):
                     row_data[f"Leaf_angle_{i}"] = a
+
+                # SVG export for leaf angles
+                if svg_renderer and hasattr(la, 'branch_data'):
+                    try:
+                        # Export individual leaf angle visualization
+                        svg_filename = os.path.join(svg_output_path, f"{base}_leaf_angles.svg")
+                        svg_renderer.export_leaf_angles_svg(
+                            la.branch_data, svg_camera_params[0], svg_camera_params[1],
+                            filename=svg_filename,
+                            stem_radius=4.0,
+                            leaf_radius=4.0,
+                            midpoint_radius=6.0
+                        )
+                        logger.info(f"[leaf_angles] SVG exported: {svg_filename}")
+                        
+                        # Export combined visualization with point cloud background
+                        if segmentation.labeled_pcd is not None:
+                            bg_points = np.asarray(segmentation.labeled_pcd.points)
+                            combined_svg = os.path.join(svg_output_path, f"{base}_combined_analysis.svg")
+                            svg_renderer.export_combined_svg(
+                                point_cloud=bg_points,
+                                branch_data=la.branch_data,
+                                camera_matrix=svg_camera_params[0],
+                                extrinsic_matrix=svg_camera_params[1],
+                                filename=combined_svg,
+                                point_radius=0.8,
+                                angle_scale=1.2
+                            )
+                            logger.info(f"[leaf_angles] Combined SVG exported: {combined_svg}")
+                            
+                    except Exception as e:
+                        logger.warning(f"[leaf_angles] SVG export failed: {e}")
 
                 logger.info(f"[leaf_angles] Computed leaf angles => {la.angles}")
         except ImportError as e:
@@ -337,9 +505,18 @@ def compute_metrics(point_cloud, modules_to_run, seg_mode, scale, output_path, b
     return row_data
 
 
-def process_single_file(ply_file, modules_to_run, seg_mode, scale_map, output_path):
+def process_single_file(ply_file, modules_to_run, seg_mode, scale_map, output_path, enable_svg=False, interactive_camera=False):
     """
     Perform the actual pipeline on one .ply file, returning a dict of metrics.
+    
+    Args:
+        ply_file: Path to the .ply file
+        modules_to_run: List of module names to execute
+        seg_mode: Segmentation mode
+        scale_map: Dictionary mapping cultivar names to scale values
+        output_path: Output directory path
+        enable_svg: Whether to generate SVG visualizations
+        interactive_camera: Whether to capture camera parameters interactively
     """
     base = Path(ply_file).stem
     cultivar_key = re.sub(r"_fused_output_cluster_\d+$", "", base)
@@ -349,7 +526,23 @@ def process_single_file(ply_file, modules_to_run, seg_mode, scale_map, output_pa
         return {}
 
     pcd = load_point_cloud(ply_file)
-    row = compute_metrics(pcd, modules_to_run, seg_mode, scale, output_path, base)
+    
+    # Handle SVG camera parameters
+    svg_camera_params = None
+    if enable_svg and SVG_AVAILABLE:
+        if interactive_camera:
+            try:
+                logger.info("Capturing camera parameters interactively...")
+                camera_matrix, extrinsic_matrix = SVGRenderer.capture_open3d_camera(
+                    [pcd], f"Camera Setup - {base}"
+                )
+                svg_camera_params = (camera_matrix, extrinsic_matrix)
+                logger.info("Camera parameters captured successfully")
+            except Exception as e:
+                logger.warning(f"Interactive camera capture failed: {e}. Using defaults.")
+                svg_camera_params = None
+    
+    row = compute_metrics(pcd, modules_to_run, seg_mode, scale, output_path, base, enable_svg, svg_camera_params)
     row["Cultivar"] = base
     return row
 
@@ -378,6 +571,10 @@ def main():
                         help='Path to JSON with point cloud scale values.')
     parser.add_argument('--csv-out', default='analysis_metrics.csv',
                         help='Output CSV file.')
+    parser.add_argument('--enable-svg', action='store_true',
+                        help='Enable SVG visualization export (requires svgwrite)')
+    parser.add_argument('--interactive-camera', action='store_true', 
+                        help='Interactively capture camera parameters for SVG projection')
 
     args = parser.parse_args()
 
@@ -406,12 +603,39 @@ def main():
         logger.error(f"Invalid path: {path}")
         sys.exit(1)
 
+    # Check SVG prerequisites
+    if args.enable_svg and not SVG_AVAILABLE:
+        logger.error("SVG export requested but svgwrite not available. Install with: pip install svgwrite")
+        sys.exit(1)
+    
+    # Ensure output directory exists for SVG files
+    if args.enable_svg:
+        svg_output_dir = args.output if args.output else os.path.join(os.path.dirname(__file__), "..", "..")
+        os.makedirs(svg_output_dir, exist_ok=True)
+        logger.info(f"SVG output directory: {svg_output_dir}")
+    
     for ply in ply_files:
-        row = process_single_file(str(ply), modules, args.segmentation_mode, scale_map, args.output)
+        row = process_single_file(
+            str(ply), modules, args.segmentation_mode, scale_map, args.output,
+            enable_svg=args.enable_svg, interactive_camera=args.interactive_camera
+        )
         if row:
             append_to_csv(row)
 
     logger.info("All processing completed.")
+    
+    # Summarize SVG outputs if enabled
+    if args.enable_svg:
+        svg_check_dir = args.output if args.output else os.path.join(os.path.dirname(__file__), "..", "..")
+        if os.path.exists(svg_check_dir):
+            svg_files = [f for f in os.listdir(svg_check_dir) if f.endswith('.svg')]
+            if svg_files:
+                logger.info(f"\nGenerated {len(svg_files)} SVG files:")
+                for svg_file in sorted(svg_files):
+                    logger.info(f"  - {svg_file}")
+                logger.info(f"\nSVG files saved to: {svg_check_dir}")
+            else:
+                logger.info("No SVG files were generated (check for errors above)")
 
 
 if __name__ == '__main__':
