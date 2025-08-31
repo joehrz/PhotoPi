@@ -5,6 +5,7 @@
 ## System Overview
 
 <p align="center">
+[Project Page](https://github.com/joehrz/PhotoPi) | [Paper](https://arxiv.org/abs/2504.16840) | [Data](www.frdr-dfdr.ca/repo/dataset/2e8d36ee-2183-4926-94d1-7323a702e309)
 <img src="docs/images/full_complete_rig_back.jpg" alt="Complete PhotoPi photogrammetry rig setup showing camera array, turntable, and aluminum frame" width="50%"/>
 </p>
 
