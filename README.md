@@ -4,17 +4,15 @@
 
 ## System Overview
 
-
-<div align="center"> 
-
-[Project Page](https://github.com/joehrz/PhotoPi) | [Paper](https://arxiv.org/abs/2504.16840) | [Data](www.frdr-dfdr.ca/repo/dataset/2e8d36ee-2183-4926-94d1-7323a702e309)
-</div>
-
 <p align="center">
 
 <img src="docs/images/full_complete_rig_back.jpg" alt="Complete PhotoPi photogrammetry rig setup showing camera array, turntable, and aluminum frame" width="50%"/>
 </p>
 
+<div align="center"> 
+
+[Project Page](https://github.com/joehrz/PhotoPi) | [Paper](https://arxiv.org/abs/2504.16840) | [Data](www.frdr-dfdr.ca/repo/dataset/2e8d36ee-2183-4926-94d1-7323a702e309)
+</div>
 *Complete PhotoPi system setup: multi-camera array, motorized turntable, and aluminum frame structure for automated 3D plant phenotyping*
 
 
